@@ -32,7 +32,7 @@ Pledge 是一个去中心化金融（DeFi）项目，旨在提供固定利率的
 
 ## 代码分析
 
-PledgePool.sol 是 Pledge 项目的核心智能合约之一，主要功能包括：
+PledgePool.sol 是 Pledge 项目的核心智能合约之一。
 
 ### 1 Pool
 
