@@ -41,6 +41,8 @@ PledgePool.sol 是 Pledge 项目的核心智能合约之一。
 - **自动清算：** 根据设定的阈值自动触发清算操作，保护借贷双方的利益。
 - **费用管理：** 设置和管理借贷费用，确保平台的可持续运营。
 
+![whiteboard_exported_image](image/440155705-db77416d-9a71-46b8-84dd-eb5a72fcdf90.png)  
+
 ## 事件和函数
 
 - **事件：** 如 DepositLend、RefundLend、ClaimLend 等，用于记录用户操作。
