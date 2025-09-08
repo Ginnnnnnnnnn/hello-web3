@@ -10,7 +10,7 @@ import "../interface/IUniswapV2Router02.sol";
 import "../multiSignature/multiSignatureClient.sol";
 
 // ReentrancyGuard 防重攻击
-// SafeTransfer 安全转移资产
+// SafeTransfer 资产转移合约
 // multiSignatureClient 多签合约
 contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
     using SafeMath for uint256;
@@ -81,10 +81,10 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
         bool hasNoRefund; // 默认为false，false = 未退款，true = 已退款
         bool hasNoClaim; // 默认为false，false = 未认领，true = 已认领
     }
-    // Info of each user that stakes tokens.  {user.address : {pool.index : user.borrowInfo}}
+    // 用户借款信息  {user.address : {pool.index : user.borrowInfo}}
     mapping(address => mapping(uint256 => BorrowInfo)) public userBorrowInfo;
 
-    // 借款用户信息
+    // 存款用户信息
     struct LendInfo {
         uint256 stakeAmount; // 当前借款的质押金额
         uint256 refundAmount; // 超额退款金额
@@ -92,7 +92,7 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
         bool hasNoClaim; // 默认为false，false = 无索赔，true = 已索赔
     }
 
-    // Info of each user that stakes tokens.  {user.address : {pool.index : user.lendInfo}}
+    // 用户存款信息  {user.address : {pool.index : user.lendInfo}}
     mapping(address => mapping(uint256 => LendInfo)) public userLendInfo;
 
     // 事件
@@ -270,8 +270,8 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
      * @param _interestRate 利率
      * @param _maxSupply 最大供应量
      * @param _martgageRate 抵押率
-     * @param _lendToken 借款代币
-     * @param _borrowToken 借出代币
+     * @param _lendToken 存款代币
+     * @param _borrowToken 借款代币
      * @param _spToken SP代币
      * @param _jpToken JP代币
      * @param _autoLiquidateThreshold 自动清算阈值
@@ -329,7 +329,7 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
             })
         );
     }
-    
+
     /**
      * @dev Get pool state
      * @notice returned is an int integer
@@ -513,17 +513,18 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
         _redeem(msg.sender, pool.lendToken, lendInfo.stakeAmount); // 执行赎回操作
         // 更新用户信息
         lendInfo.hasNoRefund = true; // 设置没有退款为真
+        // 触发紧急贷款提款事件
         emit EmergencyLendWithdrawal(
             msg.sender,
             pool.lendToken,
             lendInfo.stakeAmount
-        ); // 触发紧急贷款提款事件
+        );
     }
 
     /**
-     * @dev 借款人质押操作
+     * @dev 借款人借款操作
      * @param _pid 是池子索引
-     * @param _stakeAmount 是用户质押的数量
+     * @param _stakeAmount 用户抵押数量
      */
     function depositBorrow(
         uint256 _pid,
@@ -720,6 +721,9 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
 
     /**
      * @dev  结算
+     * @notice 获取池子信息，计算池子是否集资成功，根据 lendSupply、borrowSupply 是否都有金额来判断。
+     * 匹配失败（UNDONE）：将池子装备标记为 UNDONE，存款人、贷款人使用紧急提现功能，提走资金。
+     * 匹配成功（EXECUTION）：
      * @param _pid 是池子的索引
      */
     function settle(uint256 _pid) public validCall {
@@ -747,7 +751,7 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
                 pool.martgageRate
             );
             if (pool.lendSupply > actualValue) {
-                // 总借款大于总借出
+                // 总借款大于总存款
                 data.settleAmountLend = actualValue;
                 data.settleAmountBorrow = pool.borrowSupply;
             } else {
@@ -871,7 +875,9 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
     }
 
     /**
-     * @dev 检查清算条件,它首先获取了池子的基础信息和数据信息，然后计算了保证金的当前价值和清算阈值，最后比较了这两个值，如果保证金的当前价值小于清算阈值，那么就满足清算条件，函数返回true，否则返回false。
+     * @dev 检查清算条件,
+     * @notice 它首先获取了池子的基础信息和数据信息，然后计算了保证金的当前价值和清算阈值，
+     * 最后比较了这两个值，如果保证金的当前价值小于清算阈值，那么就满足清算条件，函数返回true，否则返回false。
      * @param _pid 是池子的索引
      */
     function checkoutLiquidate(uint256 _pid) external view returns (bool) {
