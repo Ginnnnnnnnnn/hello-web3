@@ -746,12 +746,12 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
                 .borrowSupply
                 .mul(prices[1].mul(calDecimal).div(prices[0]))
                 .div(calDecimal);
-            // 转换为稳定币价值
+            // 转换为稳定币价值，次计算是计算出 borrowSupply 需要存款多少 lendSupply
             uint256 actualValue = totalValue.mul(baseDecimal).div(
                 pool.martgageRate
             );
             if (pool.lendSupply > actualValue) {
-                // 总借款大于总存款
+                // 总借款大于总借出
                 data.settleAmountLend = actualValue;
                 data.settleAmountBorrow = pool.borrowSupply;
             } else {
