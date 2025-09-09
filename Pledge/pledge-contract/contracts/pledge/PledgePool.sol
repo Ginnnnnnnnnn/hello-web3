@@ -33,13 +33,13 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
     PoolState constant defaultChoice = PoolState.MATCH;
 
     bool public globalPaused = false;
-    // pancake swap router
+    // 交易所地址
     address public swapRouter;
-    // receiving fee address
+    // 费用收款地址
     address payable public feeAddress;
-    // oracle address
+    // 预言机地址
     IBscPledgeOracle public oracle;
-    // fee
+    // 费用
     uint256 public lendFee;
     uint256 public borrowFee;
 
@@ -553,7 +553,8 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
     }
 
     /**
-     * @dev 退还给借款人的过量存款，当借款人的质押量大于0，且借款供应量减去结算借款量大于0，且借款人没有退款时，计算退款金额并进行退款。
+     * @dev 退还给借款人的过量存款
+     * 当借款人的质押量大于0，且借款供应量减去结算借款量大于0，且借款人没有退款时，计算退款金额并进行退款。
      * @notice 池状态不等于匹配和未完成
      * @param _pid 是池状态
      */
@@ -587,7 +588,7 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
     }
 
     /**
-     * @dev 借款人接收 sp_token 和贷款资金
+     * @dev 借款人接收 jp_token 和贷款资金
      * @notice 池状态不等于匹配和未完成
      * @param _pid 是池状态
      */
@@ -714,8 +715,8 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
     }
 
     /**
-     * @dev Can it be settle
-     * @param _pid is pool index
+     * @dev 校验是否可以结算
+     * @param _pid 借贷池ID
      */
     function checkoutSettle(uint256 _pid) public view returns (bool) {
         return block.timestamp > poolBaseInfo[_pid].settleTime;
@@ -726,7 +727,7 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
      * @notice 获取池子信息，计算池子是否集资成功，根据 lendSupply、borrowSupply 是否都有金额来判断。
      * 匹配失败（UNDONE）：将池子装备标记为 UNDONE，存款人、贷款人使用紧急提现功能，提走资金。
      * 匹配成功（EXECUTION）：
-     * @param _pid 是池子的索引
+     * @param _pid 借贷池ID
      */
     function settle(uint256 _pid) public validCall {
         // 获取基础池信息
@@ -757,7 +758,7 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
                 data.settleAmountLend = actualValue;
                 data.settleAmountBorrow = pool.borrowSupply;
             } else {
-                // 总借款小于总借出，基于总贷款计算总借款
+                // 总借款小于总借款，基于总贷款计算总借款
                 data.settleAmountLend = pool.lendSupply;
                 data.settleAmountBorrow = pool
                     .lendSupply
@@ -912,29 +913,36 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
             pool.state == PoolState.EXECUTION,
             "liquidate: 池子的状态必须是执行状态"
         ); // 需要池子的状态是执行状态
+
         // sellamount
         (address token0, address token1) = (pool.borrowToken, pool.lendToken); // 获取借款和贷款的token
+
         // 时间比率 = ((结束时间 - 结算时间) * 基础小数)/365天
         uint256 timeRatio = (
             (pool.endTime.sub(pool.settleTime)).mul(baseDecimal)
         ).div(baseYear);
+
         // 利息 = 时间比率 * 利率 * 结算贷款金额
         uint256 interest = timeRatio
             .mul(pool.interestRate.mul(data.settleAmountLend))
             .div(1e16);
+
         // 贷款金额 = 结算贷款金额 + 利息
         uint256 lendAmount = data.settleAmountLend.add(interest);
-        // sellamount = lendAmount*(1+lendFee)
+
         // 添加贷款费用
         uint256 sellAmount = lendAmount.mul(lendFee.add(baseDecimal)).div(
             baseDecimal
         );
+
+        // 执行交换操作, token0 -> token1，amountSell是买了多少token0，amountIn收到了多少token1
         (uint256 amountSell, uint256 amountIn) = _sellExactAmount(
             swapRouter,
             token0,
             token1,
             sellAmount
         ); // 卖出准确的金额
+
         // 可能会有滑点，amountIn - lendAmount < 0;
         if (amountIn > lendAmount) {
             uint256 feeAmount = amountIn.sub(lendAmount); // 费用金额
@@ -944,6 +952,7 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
         } else {
             data.liquidationAmounLend = amountIn;
         }
+
         // liquidationAmounBorrow  借款费用
         uint256 remianNowAmount = data.settleAmountBorrow.sub(amountSell); // 剩余的现在的金额
         uint256 remianBorrowAmount = redeemFees(
@@ -952,8 +961,10 @@ contract PledgePool is ReentrancyGuard, SafeTransfer, multiSignatureClient {
             remianNowAmount
         ); // 剩余的借款金额
         data.liquidationAmounBorrow = remianBorrowAmount;
+
         // 更新池子状态
         pool.state = PoolState.LIQUIDATION;
+
         // 事件
         emit StateChange(
             _pid,
