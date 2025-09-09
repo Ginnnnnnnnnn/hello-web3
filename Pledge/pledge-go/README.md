@@ -1,13 +1,17 @@
-# pledge-backend
+# pledge-go
 
-The project is divided into two parts, one is API and the other is scheduled task
+项目分为两部分，一部分为API，另一部分为Task。
 
-API
+## API
 
-    cd api
-    go run pledge_api.go
+```shell
+cd api
+go run pledge_api.go
+```
 
-pool task
+## Task
 
-    cd schedule
-    go run pledge_task.go
+```shell
+cd task
+go run pledge_task.go
+```

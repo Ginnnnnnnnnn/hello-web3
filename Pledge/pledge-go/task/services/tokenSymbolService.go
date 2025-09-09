@@ -8,7 +8,7 @@ import (
 	abifile "pledge-backend/contract/abi"
 	"pledge-backend/db"
 	"pledge-backend/log"
-	"pledge-backend/schedule/models"
+	"pledge-backend/task/models"
 	"pledge-backend/utils"
 	"strings"
 

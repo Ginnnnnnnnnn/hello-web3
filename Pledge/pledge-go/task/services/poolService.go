@@ -7,7 +7,7 @@ import (
 	"pledge-backend/contract/bindings"
 	"pledge-backend/db"
 	"pledge-backend/log"
-	"pledge-backend/schedule/models"
+	"pledge-backend/task/models"
 	"pledge-backend/utils"
 	"strings"
 

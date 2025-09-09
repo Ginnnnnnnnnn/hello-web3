@@ -1,34 +1,41 @@
 package routes
 
 import (
-	"github.com/gin-gonic/gin"
 	"pledge-backend/api/controllers"
 	"pledge-backend/api/middlewares"
 	"pledge-backend/config"
+
+	"github.com/gin-gonic/gin"
 )
 
+// 初始化路由
 func InitRoute(e *gin.Engine) *gin.Engine {
 
-	// version group
+	// 版本分组
 	v2Group := e.Group("/api/v" + config.Config.Env.Version)
 
-	// pledge-defi backend
+	//====================================== web ======================================
+
+	// 借贷池
 	poolController := controllers.PoolController{}
-	v2Group.GET("/poolBaseInfo", poolController.PoolBaseInfo)                                   //pool base information
-	v2Group.GET("/poolDataInfo", poolController.PoolDataInfo)                                   //pool data information
-	v2Group.GET("/token", poolController.TokenList)                                             //pool token information
-	v2Group.POST("/pool/debtTokenList", middlewares.CheckToken(), poolController.DebtTokenList) //pool debtTokenList
-	v2Group.POST("/pool/search", middlewares.CheckToken(), poolController.Search)               //pool search
+	v2Group.GET("/poolBaseInfo", poolController.PoolBaseInfo)
+	v2Group.GET("/poolDataInfo", poolController.PoolDataInfo)
+	v2Group.GET("/token", poolController.TokenList)
+	v2Group.POST("/pool/debtTokenList", middlewares.CheckToken(), poolController.DebtTokenList)
+	v2Group.POST("/pool/search", middlewares.CheckToken(), poolController.Search)
 
-	// plgr-usdt price
+	// 价格
 	priceController := controllers.PriceController{}
-	v2Group.GET("/price", priceController.NewPrice) //new price on ku-coin-exchange
+	v2Group.GET("/price", priceController.NewPrice)
 
-	// pledge-defi admin backend
+	//====================================== admin ======================================
+
+	// 多签
 	multiSignPoolController := controllers.MultiSignPoolController{}
 	v2Group.POST("/pool/setMultiSign", middlewares.CheckToken(), multiSignPoolController.SetMultiSign) //multi-sign set
 	v2Group.POST("/pool/getMultiSign", middlewares.CheckToken(), multiSignPoolController.GetMultiSign) //multi-sign get
 
+	// 用户
 	userController := controllers.UserController{}
 	v2Group.POST("/user/login", userController.Login)                             // login
 	v2Group.POST("/user/logout", middlewares.CheckToken(), userController.Logout) // logout

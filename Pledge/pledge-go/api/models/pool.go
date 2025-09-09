@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"pledge-backend/api/models/request"
 	"pledge-backend/db"
-	"pledge-backend/schedule/models"
+	"pledge-backend/task/models"
 )
 
 type Pool struct {

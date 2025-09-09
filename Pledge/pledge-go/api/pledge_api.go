@@ -14,36 +14,39 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// 如果更改版本，则需要修改以下文件
+// config/init.go
 func main() {
 
-	//init mysql
+	// 初始化mysql
 	db.InitMysql()
 
-	//init redis
+	// 初始化redis
 	db.InitRedis()
+
+	// 初始化表结构
 	models.InitTable()
 
-	//gin bind go-playground-validator
+	// 绑定验证器
 	validate.BindingValidator()
 
-	// websocket server
+	// 开启websocket
 	go ws.StartServer()
 
-	// get plgr price from kucoin-exchange
+	// 从kucoin交易所获取plgr价格
 	go kucoin.GetExchangePrice()
 
-	// gin start
+	// 设置启动模式
 	gin.SetMode(gin.ReleaseMode)
 	app := gin.Default()
+	// 设置静态服务器
 	staticPath := static.GetCurrentAbPathByCaller()
 	app.Static("/storage/", staticPath)
-	app.Use(middlewares.Cors()) // 「 Cross domain Middleware 」
+	// 设置跨域
+	app.Use(middlewares.Cors())
+	// 初始化路由
 	routes.InitRoute(app)
+	// 启动程序
 	_ = app.Run(":" + config.Config.Env.Port)
 
 }
-
-/*
- If you change the version, you need to modify the following files'
- config/init.go
-*/

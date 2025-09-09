@@ -10,8 +10,8 @@ import (
 	"pledge-backend/contract/bindings"
 	"pledge-backend/db"
 	"pledge-backend/log"
-	serviceCommon "pledge-backend/schedule/common"
-	"pledge-backend/schedule/models"
+	serviceCommon "pledge-backend/task/common"
+	"pledge-backend/task/models"
 	"pledge-backend/utils"
 	"time"
 

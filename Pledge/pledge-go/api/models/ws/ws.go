@@ -3,12 +3,13 @@ package ws
 import (
 	"encoding/json"
 	"errors"
-	"github.com/gorilla/websocket"
 	"pledge-backend/api/models/kucoin"
 	"pledge-backend/config"
 	"pledge-backend/log"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 const SuccessCode = 0
@@ -41,11 +42,13 @@ var UserPingPongDurTime = config.Config.Env.WssTimeoutDuration // seconds
 func (s *Server) SendToClient(data string, code int) {
 	s.Lock()
 	defer s.Unlock()
-
 	dataBytes, err := json.Marshal(Message{
 		Code: code,
 		Data: data,
 	})
+	if err != nil {
+		log.Logger.Sugar().Error(s.Id+" SendToClient err ", err)
+	}
 	err = s.Socket.WriteMessage(websocket.TextMessage, dataBytes)
 	if err != nil {
 		log.Logger.Sugar().Error(s.Id+" SendToClient err ", err)
@@ -67,14 +70,12 @@ func (s *Server) ReadAndWrite() {
 	//write
 	go func() {
 		for {
-			select {
-			case message, ok := <-s.Send:
-				if !ok {
-					errChan <- errors.New("write message error")
-					return
-				}
-				s.SendToClient(string(message), SuccessCode)
+			message, ok := <-s.Send
+			if !ok {
+				errChan <- errors.New("write message error")
+				return
 			}
+			s.SendToClient(string(message), SuccessCode)
 		}
 	}()
 
@@ -117,14 +118,12 @@ func (s *Server) ReadAndWrite() {
 func StartServer() {
 	log.Logger.Info("WsServer start")
 	for {
-		select {
-		case price, ok := <-kucoin.PlgrPriceChan:
-			if ok {
-				Manager.Servers.Range(func(key, value interface{}) bool {
-					value.(*Server).SendToClient(price, SuccessCode)
-					return true
-				})
-			}
+		price, ok := <-kucoin.PlgrPriceChan
+		if ok {
+			Manager.Servers.Range(func(key, value interface{}) bool {
+				value.(*Server).SendToClient(price, SuccessCode)
+				return true
+			})
 		}
 	}
 }

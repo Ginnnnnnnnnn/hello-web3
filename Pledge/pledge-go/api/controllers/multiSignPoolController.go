@@ -1,18 +1,20 @@
 package controllers
 
 import (
-	"github.com/gin-gonic/gin"
 	"pledge-backend/api/common/statecode"
 	"pledge-backend/api/models/request"
 	"pledge-backend/api/models/response"
 	"pledge-backend/api/services"
 	"pledge-backend/api/validate"
 	"pledge-backend/log"
+
+	"github.com/gin-gonic/gin"
 )
 
 type MultiSignPoolController struct {
 }
 
+// 多签-设置
 func (c *MultiSignPoolController) SetMultiSign(ctx *gin.Context) {
 	res := response.Gin{Res: ctx}
 	req := request.SetMultiSign{}
@@ -32,9 +34,9 @@ func (c *MultiSignPoolController) SetMultiSign(ctx *gin.Context) {
 	}
 
 	res.Response(ctx, statecode.CommonSuccess, nil)
-	return
 }
 
+// 多签-获取
 func (c *MultiSignPoolController) GetMultiSign(ctx *gin.Context) {
 	res := response.Gin{Res: ctx}
 	req := request.GetMultiSign{}
@@ -55,5 +57,4 @@ func (c *MultiSignPoolController) GetMultiSign(ctx *gin.Context) {
 	}
 
 	res.Response(ctx, statecode.CommonSuccess, result)
-	return
 }

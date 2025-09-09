@@ -2,8 +2,8 @@ package tasks
 
 import (
 	"pledge-backend/db"
-	"pledge-backend/schedule/common"
-	"pledge-backend/schedule/services"
+	"pledge-backend/task/common"
+	"pledge-backend/task/services"
 	"time"
 
 	"github.com/jasonlvhit/gocron"
@@ -11,16 +11,16 @@ import (
 
 func Task() {
 
-	// get environment variables
+	// 获取环境变量
 	common.GetEnv()
 
-	// flush redis db
+	// 刷新Redis
 	err := db.RedisFlushDB()
 	if err != nil {
 		panic("clear redis error " + err.Error())
 	}
 
-	//init task
+	// 初始化执行
 	services.NewPool().UpdateAllPoolInfo()
 	services.NewTokenPrice().UpdateContractPrice()
 	services.NewTokenSymbol().UpdateContractSymbol()
@@ -29,16 +29,18 @@ func Task() {
 	// services.NewTokenPrice().SavePlgrPrice()
 	services.NewTokenPrice().SavePlgrPriceTestNet()
 
-	//run pool task
+	// 声明Scheduler
 	s := gocron.NewScheduler()
 	s.ChangeLoc(time.UTC)
+	// 注册任务
 	_ = s.Every(2).Minutes().From(gocron.NextTick()).Do(services.NewPool().UpdateAllPoolInfo)
 	_ = s.Every(1).Minute().From(gocron.NextTick()).Do(services.NewTokenPrice().UpdateContractPrice)
 	_ = s.Every(2).Hours().From(gocron.NextTick()).Do(services.NewTokenSymbol().UpdateContractSymbol)
 	_ = s.Every(2).Hours().From(gocron.NextTick()).Do(services.NewTokenLogo().UpdateTokenLogo)
 	_ = s.Every(30).Minutes().From(gocron.NextTick()).Do(services.NewBalanceMonitor().Monitor)
-	//_ = s.Every(30).Minutes().From(gocron.NextTick()).Do(services.NewTokenPrice().SavePlgrPrice)
+	// _ = s.Every(30).Minutes().From(gocron.NextTick()).Do(services.NewTokenPrice().SavePlgrPrice)
 	_ = s.Every(30).Minutes().From(gocron.NextTick()).Do(services.NewTokenPrice().SavePlgrPriceTestNet)
-	<-s.Start() // Start all the pending jobs
+	// 启动
+	<-s.Start()
 
 }

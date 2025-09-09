@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"github.com/gin-gonic/gin"
 	"pledge-backend/api/common/statecode"
 	"pledge-backend/api/models"
 	"pledge-backend/api/models/request"
@@ -12,11 +11,14 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type PoolController struct {
 }
 
+// 借贷池-基础信息
 func (c *PoolController) PoolBaseInfo(ctx *gin.Context) {
 	res := response.Gin{Res: ctx}
 	req := request.PoolBaseInfo{}
@@ -35,9 +37,9 @@ func (c *PoolController) PoolBaseInfo(ctx *gin.Context) {
 	}
 
 	res.Response(ctx, statecode.CommonSuccess, result)
-	return
 }
 
+// 借贷池-数据信息
 func (c *PoolController) PoolDataInfo(ctx *gin.Context) {
 	res := response.Gin{Res: ctx}
 	req := request.PoolDataInfo{}
@@ -56,11 +58,10 @@ func (c *PoolController) PoolDataInfo(ctx *gin.Context) {
 	}
 
 	res.Response(ctx, statecode.CommonSuccess, result)
-	return
 }
 
+// 借贷池-代币列表
 func (c *PoolController) TokenList(ctx *gin.Context) {
-
 	req := request.TokenList{}
 	result := response.TokenList{}
 
@@ -101,9 +102,29 @@ func (c *PoolController) TokenList(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, result)
-	return
 }
 
+// 借贷池-债务代币列表
+func (c *PoolController) DebtTokenList(ctx *gin.Context) {
+	res := response.Gin{Res: ctx}
+	req := request.TokenList{}
+
+	errCode := validate.NewTokenList().TokenList(ctx, &req)
+	if errCode != statecode.CommonSuccess {
+		res.Response(ctx, errCode, nil)
+		return
+	}
+
+	errCode, result := services.NewTokenList().DebtTokenList(&req)
+	if errCode != statecode.CommonSuccess {
+		res.Response(ctx, errCode, nil)
+		return
+	}
+
+	res.Response(ctx, statecode.CommonSuccess, result)
+}
+
+// 借贷池-检索
 func (c *PoolController) Search(ctx *gin.Context) {
 	res := response.Gin{Res: ctx}
 	req := request.Search{}
@@ -124,27 +145,6 @@ func (c *PoolController) Search(ctx *gin.Context) {
 	result.Rows = pools
 	result.Count = count
 	res.Response(ctx, statecode.CommonSuccess, result)
-	return
-}
-
-func (c *PoolController) DebtTokenList(ctx *gin.Context) {
-	res := response.Gin{Res: ctx}
-	req := request.TokenList{}
-
-	errCode := validate.NewTokenList().TokenList(ctx, &req)
-	if errCode != statecode.CommonSuccess {
-		res.Response(ctx, errCode, nil)
-		return
-	}
-
-	errCode, result := services.NewTokenList().DebtTokenList(&req)
-	if errCode != statecode.CommonSuccess {
-		res.Response(ctx, errCode, nil)
-		return
-	}
-
-	res.Response(ctx, statecode.CommonSuccess, result)
-	return
 }
 
 func (c *PoolController) GetBaseUrl() string {

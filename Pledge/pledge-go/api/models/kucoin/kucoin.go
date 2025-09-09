@@ -1,9 +1,10 @@
 package kucoin
 
 import (
-	"github.com/Kucoin/kucoin-go-sdk"
 	"pledge-backend/db"
 	"pledge-backend/log"
+
+	"github.com/Kucoin/kucoin-go-sdk"
 )
 
 // ApiKeyVersionV2 is v2 api key version
