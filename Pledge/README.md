@@ -22,8 +22,8 @@ Pledge 是一个去中心化金融（DeFi）项目，旨在提供固定利率的
 
 ### 2 主要角色
 
-- **借款人：** 可以抵押加密资产以获得稳定币，用于投资非加密资产。
-- **贷款人：** 提供流动性，获得固定回报。
+- **贷款人（Lend）：** 提供流动性，获得固定回报。
+- **借款人（Rorrow）：** 可以抵押加密资产以获得稳定币，用于投资非加密资产。
 
 ### 3 关键组件
 
@@ -37,8 +37,20 @@ PledgePool.sol 是 Pledge 项目的核心智能合约之一。
 ### 1 Pool
 
 - **创建和管理借贷池：** 包括设置借贷池的基本信息、状态管理等。
-- **用户存款和取款：** 处理用户的借款和贷款操作，包括存款、取款、索赔等。
-- **自动清算：** 根据设定的阈值自动触发清算操作，保护借贷双方的利益。
+  - createPoolInfo 创建借贷池，初始化借贷池基本信息。
+  - setFee 修改费率。
+  - setFeeAddress 修改交易费接收地址。
+  - setSwapRouterAddress 修改dex交易所地址。
+  - setMinAmount 修改最小金额。
+  - poolLength 查询借贷池长度。
+  - getPoolState 查询借贷池状态。
+- **用户存款和取款：** 处理用户的借款和贷款操作，包括存款、取款等。
+  - depositLend 贷款人添加贷款。
+  - depositBorrow 借款人添加借款。
+- **自动结算和清算：** 根据设定时间和阈值自动结算和清算，保护借贷双方的利益。
+  - settle 结算，根据借贷款信息，判断借贷池是否成立。</br>
+    成立：修改借贷池状态为 执行中（EXECUTION），</br>
+    不成立：修改借贷池状态为 未完成（UNDONE），借贷方通过emergencyLendWithdrawal、emergencyBorrowWithdrawal取回资产。</br>
 - **费用管理：** 设置和管理借贷费用，确保平台的可持续运营。
 
 ![whiteboard_exported_image](image/440155705-db77416d-9a71-46b8-84dd-eb5a72fcdf90.png)  
