@@ -12,8 +12,9 @@ func NewTokenList() *TokenList {
 	return &TokenList{}
 }
 
+// 查询债务代币列表
 func (c *TokenList) DebtTokenList(req *request.TokenList) (int, []models.TokenInfo) {
-	err, res := models.NewTokenInfo().GetTokenInfo(req)
+	res, err := models.NewTokenInfo().GetTokenInfo(req)
 	if err != nil {
 		return statecode.CommonErrServerErr, nil
 	}
@@ -21,11 +22,11 @@ func (c *TokenList) DebtTokenList(req *request.TokenList) (int, []models.TokenIn
 
 }
 
+// 查询代币信息
 func (c *TokenList) GetTokenList(req *request.TokenList) (int, []models.TokenList) {
-	err, tokenList := models.NewTokenInfo().GetTokenList(req)
+	tokenList, err := models.NewTokenInfo().GetTokenList(req)
 	if err != nil {
 		return statecode.CommonErrServerErr, nil
 	}
 	return statecode.CommonSuccess, tokenList
-
 }

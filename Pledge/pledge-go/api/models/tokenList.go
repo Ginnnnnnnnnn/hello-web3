@@ -26,20 +26,22 @@ func NewTokenInfo() *TokenInfo {
 	return &TokenInfo{}
 }
 
-func (m *TokenInfo) GetTokenInfo(req *request.TokenList) (error, []TokenInfo) {
+// 查询债务代币列表
+func (m *TokenInfo) GetTokenInfo(req *request.TokenList) ([]TokenInfo, error) {
 	var tokenInfo = make([]TokenInfo, 0)
 	err := db.Mysql.Table("token_info").Where("chain_id", req.ChainId).Find(&tokenInfo).Debug().Error
 	if err != nil {
-		return errors.New("record select err " + err.Error()), nil
+		return nil, errors.New("record select err " + err.Error())
 	}
-	return nil, tokenInfo
+	return tokenInfo, nil
 }
 
-func (m *TokenInfo) GetTokenList(req *request.TokenList) (error, []TokenList) {
+// 查询代币信息
+func (m *TokenInfo) GetTokenList(req *request.TokenList) ([]TokenList, error) {
 	var tokenList = make([]TokenList, 0)
 	err := db.Mysql.Table("token_info").Where("chain_id", req.ChainId).Find(&tokenList).Debug().Error
 	if err != nil {
-		return errors.New("record select err " + err.Error()), nil
+		return nil, errors.New("record select err " + err.Error())
 	}
-	return nil, tokenList
+	return tokenList, nil
 }

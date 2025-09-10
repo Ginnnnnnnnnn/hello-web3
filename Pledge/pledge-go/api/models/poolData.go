@@ -31,14 +31,15 @@ func (p *PoolData) TableName() string {
 	return "pooldata"
 }
 
+// 查询数据信息
 func (p *PoolData) PoolDataInfo(chainId int, res *[]PoolDataInfoRes) error {
 	var poolData []PoolData
-
+	// 查询数据信息
 	err := db.Mysql.Table("pooldata").Where("chain_id=?", chainId).Order("pool_id asc").Find(&poolData).Debug().Error
 	if err != nil {
 		return err
 	}
-
+	// 转换结构体
 	for _, v := range poolData {
 		*res = append(*res, PoolDataInfoRes{
 			Index:    v.PoolID - 1,

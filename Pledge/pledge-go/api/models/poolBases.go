@@ -71,14 +71,15 @@ func (p *PoolBases) TableName() string {
 	return "poolbases"
 }
 
+// 查询借贷池信息
 func (p *PoolBases) PoolBaseInfo(chainId int, res *[]PoolBaseInfoRes) error {
 	var poolBases []PoolBases
-
+	// 查询借贷池信息
 	err := db.Mysql.Table("poolbases").Where("chain_id=?", chainId).Order("pool_id asc").Find(&poolBases).Debug().Error
 	if err != nil {
 		return err
 	}
-
+	// 转换结构体
 	for _, v := range poolBases {
 		borrowTokenInfo := BorrowTokenInfo{}
 		_ = json.Unmarshal([]byte(v.BorrowTokenInfo), &borrowTokenInfo)

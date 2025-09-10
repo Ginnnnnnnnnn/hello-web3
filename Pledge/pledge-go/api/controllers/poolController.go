@@ -20,22 +20,22 @@ type PoolController struct {
 
 // 借贷池-基础信息
 func (c *PoolController) PoolBaseInfo(ctx *gin.Context) {
-	res := response.Gin{Res: ctx}
 	req := request.PoolBaseInfo{}
+	res := response.Gin{Res: ctx}
 	var result []models.PoolBaseInfoRes
-
+	// 参数处理
 	errCode := validate.NewPoolBaseInfo().PoolBaseInfo(ctx, &req)
 	if errCode != statecode.CommonSuccess {
 		res.Response(ctx, errCode, nil)
 		return
 	}
-
+	// 查询借贷池信息
 	errCode = services.NewPool().PoolBaseInfo(req.ChainId, &result)
 	if errCode != statecode.CommonSuccess {
 		res.Response(ctx, errCode, nil)
 		return
 	}
-
+	// 响应
 	res.Response(ctx, statecode.CommonSuccess, result)
 }
 
@@ -44,13 +44,13 @@ func (c *PoolController) PoolDataInfo(ctx *gin.Context) {
 	res := response.Gin{Res: ctx}
 	req := request.PoolDataInfo{}
 	var result []models.PoolDataInfoRes
-
+	// 处理参数
 	errCode := validate.NewPoolDataInfo().PoolDataInfo(ctx, &req)
 	if errCode != statecode.CommonSuccess {
 		res.Response(ctx, errCode, nil)
 		return
 	}
-
+	// 查询数据信息
 	errCode = services.NewPool().PoolDataInfo(req.ChainId, &result)
 	if errCode != statecode.CommonSuccess {
 		res.Response(ctx, errCode, nil)
@@ -64,7 +64,7 @@ func (c *PoolController) PoolDataInfo(ctx *gin.Context) {
 func (c *PoolController) TokenList(ctx *gin.Context) {
 	req := request.TokenList{}
 	result := response.TokenList{}
-
+	// 处理参数
 	errCode := validate.NewTokenList().TokenList(ctx, &req)
 	if errCode != statecode.CommonSuccess {
 		ctx.JSON(200, map[string]string{
@@ -72,7 +72,7 @@ func (c *PoolController) TokenList(ctx *gin.Context) {
 		})
 		return
 	}
-
+	// 查询代币信息
 	errCode, data := services.NewTokenList().GetTokenList(&req)
 	if errCode != statecode.CommonSuccess {
 		ctx.JSON(200, map[string]string{
@@ -80,7 +80,7 @@ func (c *PoolController) TokenList(ctx *gin.Context) {
 		})
 		return
 	}
-
+	// 设置响应构造体
 	var BaseUrl = c.GetBaseUrl()
 	result.Name = "Pledge Token List"
 	result.LogoURI = BaseUrl + "storage/img/Pledge-project-logo.png"
@@ -100,7 +100,7 @@ func (c *PoolController) TokenList(ctx *gin.Context) {
 			LogoURI:  v.Logo,
 		})
 	}
-
+	// 响应
 	ctx.JSON(200, result)
 }
 
@@ -108,19 +108,19 @@ func (c *PoolController) TokenList(ctx *gin.Context) {
 func (c *PoolController) DebtTokenList(ctx *gin.Context) {
 	res := response.Gin{Res: ctx}
 	req := request.TokenList{}
-
+	// 处理参数
 	errCode := validate.NewTokenList().TokenList(ctx, &req)
 	if errCode != statecode.CommonSuccess {
 		res.Response(ctx, errCode, nil)
 		return
 	}
-
+	// 查询债务代币列表
 	errCode, result := services.NewTokenList().DebtTokenList(&req)
 	if errCode != statecode.CommonSuccess {
 		res.Response(ctx, errCode, nil)
 		return
 	}
-
+	// 响应
 	res.Response(ctx, statecode.CommonSuccess, result)
 }
 
@@ -129,19 +129,19 @@ func (c *PoolController) Search(ctx *gin.Context) {
 	res := response.Gin{Res: ctx}
 	req := request.Search{}
 	result := response.Search{}
-
+	// 处理参数
 	errCode := validate.NewSearch().Search(ctx, &req)
 	if errCode != statecode.CommonSuccess {
 		res.Response(ctx, errCode, nil)
 		return
 	}
-
+	// 检索借贷池
 	errCode, count, pools := services.NewSearch().Search(&req)
 	if errCode != statecode.CommonSuccess {
 		res.Response(ctx, errCode, nil)
 		return
 	}
-
+	// 响应
 	result.Rows = pools
 	result.Count = count
 	res.Response(ctx, statecode.CommonSuccess, result)

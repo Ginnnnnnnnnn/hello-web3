@@ -31,23 +31,23 @@ func NewPool() *Pool {
 	return &Pool{}
 }
 
-func (p *Pool) Pagination(req *request.Search, whereCondition string) (error, int64, []Pool) {
+// 检索借贷池
+func (p *Pool) Pagination(req *request.Search, whereCondition string) (int64, []Pool, error) {
 	var total int64
 	pools := []Pool{}
 	poolBase := []models.PoolBase{}
-
+	// 检索借贷池
 	db.Mysql.Table("poolbases").Where(whereCondition).Count(&total)
-
 	err := db.Mysql.Table("poolbases").Where(whereCondition).Order("pool_id desc").Limit(req.PageSize).Offset((req.Page - 1) * req.PageSize).Find(&poolBase).Debug().Error
 	if err != nil {
-		return err, 0, nil
+		return 0, nil, err
 	}
-
+	// 转换结构体
 	for _, b := range poolBase {
 		poolData := PoolData{}
 		err = db.Mysql.Table("pooldata").Where("chain_id=?", req.ChainID).First(&poolData).Debug().Error
 		if err != nil {
-			return err, 0, nil
+			return 0, nil, err
 		}
 		var lendToken models.LendToken
 		_ = json.Unmarshal([]byte(b.LendTokenInfo), &lendToken)
@@ -71,5 +71,5 @@ func (p *Pool) Pagination(req *request.Search, whereCondition string) (error, in
 			Pooldata:               poolData,
 		})
 	}
-	return nil, total, pools
+	return total, pools, nil
 }

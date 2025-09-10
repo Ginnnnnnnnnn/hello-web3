@@ -1,8 +1,9 @@
 package response
 
 import (
-	"github.com/gin-gonic/gin"
 	"pledge-backend/api/common/statecode"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Gin struct {
@@ -31,7 +32,6 @@ func (g *Gin) ResponsePages(c *gin.Context, code int, totalCount int, data inter
 		Data:  data,
 	}
 	g.Res.JSON(200, rsp)
-	return
 }
 
 // Response  响应统一格式
@@ -51,7 +51,6 @@ func (g *Gin) Response(c *gin.Context, code int, data interface{}, httpStatus ..
 		HttpStatus = httpStatus[0]
 	}
 	g.Res.JSON(HttpStatus, rsp)
-	return
 }
 
 type Response struct {
