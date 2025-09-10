@@ -25,62 +25,60 @@ func NewTokenSymbol() *TokenSymbol {
 	return &TokenSymbol{}
 }
 
-// 更新合约代币
+// 更新代币名称
 func (s *TokenSymbol) UpdateContractSymbol() {
+	// 查询所有代币信息
 	var tokens []models.TokenInfo
 	db.Mysql.Table("token_info").Find(&tokens)
+	// 遍历代币信息
 	for _, t := range tokens {
+		var err error
+		var symbol string
+		// 校验
 		if t.Token == "" {
 			log.Logger.Sugar().Error("UpdateContractSymbol token empty", t.Symbol, t.ChainId)
 			continue
 		}
-		err := errors.New("")
-		if err != nil {
-			log.Logger.Sugar().Error("UpdateContractSymbol err ", t.Symbol, t.ChainId, err)
-			continue
-		}
-		symbol := ""
 		if t.ChainId == config.Config.TestNet.ChainId {
+			// 查询代币名称
 			symbol, err = s.GetContractSymbolOnTestNet(t.Token, config.Config.TestNet.NetUrl)
+			if err != nil {
+				log.Logger.Sugar().Error("UpdateContractSymbol err ", t.Symbol, t.ChainId, err)
+				continue
+			}
 		} else if t.ChainId == config.Config.MainNet.ChainId {
+			// 判断abi文件是否存在
 			if t.AbiFileExist == 0 {
+				// 远程获取ABI文件
 				err = s.GetRemoteAbiFileByToken(t.Token, t.ChainId)
 				if err != nil {
 					log.Logger.Sugar().Error("UpdateContractSymbol GetRemoteAbiFileByToken err ", t.Symbol, t.ChainId, err)
 					continue
 				}
 			}
+			// 查询代币名称
 			symbol, err = s.GetContractSymbolOnMainNet(t.Token, config.Config.MainNet.NetUrl)
+			if err != nil {
+				log.Logger.Sugar().Error("UpdateContractSymbol err ", t.Symbol, t.ChainId, err)
+				continue
+			}
 		} else {
 			log.Logger.Sugar().Error("UpdateContractSymbol chain_id err ", t.Symbol, t.ChainId)
 			continue
 		}
-		if err != nil {
-			log.Logger.Sugar().Error("UpdateContractSymbol err ", t.Symbol, t.ChainId, err)
-			continue
-		}
-
-		hasNewData, err := s.CheckSymbolData(t.Token, t.ChainId, symbol)
-		if err != nil {
+		// 处理代币名称
+		hasNewData, err := s.HandleSymbolData(t.Token, t.ChainId, symbol)
+		if !hasNewData || err != nil {
 			log.Logger.Sugar().Error("UpdateContractSymbol CheckSymbolData err ", err)
 			continue
-		}
-
-		if hasNewData {
-			err = s.SaveSymbolData(t.Token, t.ChainId, symbol)
-			if err != nil {
-				log.Logger.Sugar().Error("UpdateContractSymbol SaveSymbolData err ", err)
-				continue
-			}
 		}
 	}
 }
 
-// GetRemoteAbiFileByToken get and save remote abi file on main net
+// 获取远程abi文件
 func (s *TokenSymbol) GetRemoteAbiFileByToken(token, chainId string) error {
 
 	// url := "https://api.bscscan.com/api?module=contract&action=getabi&apikey=HJ3WS4N88QJ6S7PQ8D89BD49IZIFP1JFER&address=" + token
-
 	url := "https://api-sepolia.etherscan.io/api?module=contract&action=getabi&address=" + token
 
 	res, err := utils.HttpGet(url, map[string]string{})
@@ -164,47 +162,56 @@ func (s *TokenSymbol) GetContractSymbolOnMainNet(token, network string) (string,
 	return res[0].(string), nil
 }
 
-// 获取合同代币-测试网
+// 获取代币名称-测试网
 func (s *TokenSymbol) GetContractSymbolOnTestNet(token, network string) (string, error) {
+	// 链接ethereum
 	ethereumConn, err := ethclient.Dial(network)
 	if nil != err {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
 		return "", err
 	}
+	// 读取erc20 abi
 	abiStr, err := abifile.GetAbiByToken("erc20")
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
 		return "", err
 	}
+	// 转换 abi json
 	parsed, err := abi.JSON(strings.NewReader(abiStr))
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
 		return "", err
 	}
+	// 加载合约
 	contract := bind.NewBoundContract(common.HexToAddress(token), parsed, ethereumConn, ethereumConn, ethereumConn)
+	// 获取代币名称
 	res := make([]interface{}, 0)
 	err = contract.Call(nil, &res, "symbol")
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
 		return "", err
 	}
-
+	// 返回
 	return res[0].(string), nil
 }
 
-// CheckSymbolData Saving symbol data to redis if it has new symbol
-func (s *TokenSymbol) CheckSymbolData(token, chainId, symbol string) (bool, error) {
+// 处理代币名称数据
+func (s *TokenSymbol) HandleSymbolData(token, chainId, symbol string) (bool, error) {
+	// 获取redis代币名称
 	redisKey := "token_info:" + chainId + ":" + token
 	redisTokenInfoBytes, err := db.RedisGet(redisKey)
 	if err != nil {
 		log.Logger.Error(err.Error())
 		return false, err
 	}
+	// 判断redis中是否存在
 	if len(redisTokenInfoBytes) <= 0 {
-		err = s.CheckTokenInfo(token, chainId)
+		// 保存代币名称信息
+		err = s.SaveTokenInfo(token, chainId)
 		if err != nil {
 			log.Logger.Error(err.Error())
 		}
+		// 保存代币名称到redis
 		err = db.RedisSet(redisKey, models.RedisTokenInfo{
 			Token:   token,
 			ChainId: chainId,
@@ -215,17 +222,17 @@ func (s *TokenSymbol) CheckSymbolData(token, chainId, symbol string) (bool, erro
 			return false, err
 		}
 	} else {
+		// 转换redis数据到结构体
 		redisTokenInfo := models.RedisTokenInfo{}
 		err = json.Unmarshal(redisTokenInfoBytes, &redisTokenInfo)
 		if err != nil {
 			log.Logger.Error(err.Error())
 			return false, err
 		}
-
+		// 设置最新名称
 		if redisTokenInfo.Symbol == symbol {
 			return false, nil
 		}
-
 		redisTokenInfo.Symbol = symbol
 		err = db.RedisSet(redisKey, redisTokenInfo, 0)
 		if err != nil {
@@ -236,8 +243,8 @@ func (s *TokenSymbol) CheckSymbolData(token, chainId, symbol string) (bool, erro
 	return true, nil
 }
 
-// CheckTokenInfo  Insert token information if it was not in mysql
-func (s *TokenSymbol) CheckTokenInfo(token, chainId string) error {
+// 保存代币名称信息
+func (s *TokenSymbol) SaveTokenInfo(token, chainId string) error {
 	tokenInfo := models.TokenInfo{}
 	err := db.Mysql.Table("token_info").Where("token=? and chain_id=?", token, chainId).First(&tokenInfo).Debug().Error
 	if err != nil {
@@ -256,21 +263,5 @@ func (s *TokenSymbol) CheckTokenInfo(token, chainId string) error {
 			return err
 		}
 	}
-	return nil
-}
-
-// SaveSymbolData Saving symbol data to mysql if it has new symbol
-func (s *TokenSymbol) SaveSymbolData(token, chainId, symbol string) error {
-	nowDateTime := utils.GetCurDateTimeFormat()
-
-	err := db.Mysql.Table("token_info").Where("token=? and chain_id=? ", token, chainId).Updates(map[string]interface{}{
-		"symbol":     symbol,
-		"updated_at": nowDateTime,
-	}).Debug().Error
-	if err != nil {
-		log.Logger.Sugar().Error("UpdateContractSymbol SaveSymbolData err ", err)
-		return err
-	}
-
 	return nil
 }

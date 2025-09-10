@@ -234,7 +234,7 @@ func HttpGet(url string, header map[string]string) ([]byte, error) {
 		_ = Body.Close()
 	}(resp.Body)
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 func HttpPost(uri string, header map[string]string, data interface{}, args ...string) ([]byte, error) {

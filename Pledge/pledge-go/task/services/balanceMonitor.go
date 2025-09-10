@@ -20,13 +20,13 @@ func NewBalanceMonitor() *BalanceMonitor {
 	return &BalanceMonitor{}
 }
 
-// 监控余额不足时发送电子邮件
+// 监控合约余额
 func (s *BalanceMonitor) Monitor() {
-
-	//check on bsc test-net
+	// 校验测试网
 	tokenPoolBalance, err := s.GetBalance(config.Config.TestNet.NetUrl, config.Config.TestNet.PledgePoolToken)
 	thresholdPoolToken, ok := new(big.Int).SetString(config.Config.Threshold.PledgePoolTokenThresholdBnb, 10)
 	if ok && (err == nil) && (tokenPoolBalance.Cmp(thresholdPoolToken) <= 0) {
+		// 发送邮件
 		emailBody, err := s.EmailBody(config.Config.TestNet.PledgePoolToken, "TBNB", tokenPoolBalance.String(), thresholdPoolToken.String())
 		if err != nil {
 			log.Logger.Error(err.Error())
@@ -54,22 +54,22 @@ func (s *BalanceMonitor) Monitor() {
 	// }
 }
 
-// GetBalance get balance of ERC20 token
+// 获取余额
 func (s *BalanceMonitor) GetBalance(netUrl, token string) (*big.Int, error) {
-
+	// 链接ethereum
 	ethereumClient, err := ethclient.Dial(netUrl)
 	if err != nil {
 		log.Logger.Error(err.Error())
 		return big.NewInt(0), err
 	}
 	defer ethereumClient.Close()
-
+	// 获取合约余额
 	balance, err := ethereumClient.BalanceAt(context.Background(), common.HexToAddress(token), nil)
 	if err != nil {
 		log.Logger.Error(err.Error())
 		return big.NewInt(0), err
 	}
-
+	// 返回
 	return balance, err
 }
 

@@ -29,63 +29,68 @@ func (s *poolService) UpdateAllPoolInfo() {
 	// s.UpdatePoolInfo(config.Config.MainNet.PledgePoolToken, config.Config.MainNet.NetUrl, config.Config.MainNet.ChainId)
 }
 
+// 更新交易池信息
 func (s *poolService) UpdatePoolInfo(contractAddress, network, chainId string) {
 	log.Logger.Sugar().Info("UpdatePoolInfo ", contractAddress+" "+network)
+	// 链接ethereum
 	ethereumConn, err := ethclient.Dial(network)
 	if nil != err {
 		log.Logger.Error(err.Error())
 		return
 	}
+	// 加载合约
 	pledgePoolToken, err := bindings.NewPledgePoolToken(common.HexToAddress(contractAddress), ethereumConn)
 	if nil != err {
 		log.Logger.Error(err.Error())
 		return
 	}
-	// borrowFee
+	// 借款手续费
 	borrowFee, err := pledgePoolToken.PledgePoolTokenCaller.BorrowFee(nil)
 	if err != nil {
 		log.Logger.Error(err.Error())
 		return
 	}
-	// lendFee
+	// 贷款手续费
 	lendFee, err := pledgePoolToken.PledgePoolTokenCaller.LendFee(nil)
 	if err != nil {
 		log.Logger.Error(err.Error())
 		return
 	}
-	//poolLength
+	// 借贷池长度
 	pLength, err := pledgePoolToken.PledgePoolTokenCaller.PoolLength(nil)
 	if nil != err {
 		log.Logger.Error(err.Error())
 		return
 	}
-
+	// 遍历查询借贷池信息
 	for i := 0; i <= int(pLength.Int64())-1; i++ {
-
 		log.Logger.Sugar().Info("UpdatePoolInfo ", i)
+		// 查询借贷池基础信息
 		poolId := utils.IntToString(i + 1)
 		baseInfo, err := pledgePoolToken.PledgePoolTokenCaller.PoolBaseInfo(nil, big.NewInt(int64(i)))
 		if err != nil {
 			log.Logger.Sugar().Info("UpdatePoolInfo PoolBaseInfo err", poolId, err)
 			continue
 		}
-
-		_, borrowToken := models.NewTokenInfo().GetTokenInfo(baseInfo.BorrowToken.String(), chainId)
+		// 查询借贷池贷款代币信息
 		_, lendToken := models.NewTokenInfo().GetTokenInfo(baseInfo.LendToken.String(), chainId)
-
+		// 查询借贷池借款代币信息
+		_, borrowToken := models.NewTokenInfo().GetTokenInfo(baseInfo.BorrowToken.String(), chainId)
+		// 将贷款代币信息转json
 		lendTokenJson, _ := json.Marshal(models.LendToken{
 			LendFee:    lendFee.String(),
 			TokenLogo:  lendToken.Logo,
 			TokenName:  lendToken.Symbol,
 			TokenPrice: lendToken.Price,
 		})
+		// 将借款代币信息转json
 		borrowTokenJson, _ := json.Marshal(models.BorrowToken{
 			BorrowFee:  borrowFee.String(),
 			TokenLogo:  borrowToken.Logo,
 			TokenName:  borrowToken.Symbol,
 			TokenPrice: borrowToken.Price,
 		})
-
+		// 构造借贷池结构体
 		poolBase := models.PoolBase{
 			SettleTime:             baseInfo.SettleTime.String(),
 			PoolId:                 utils.StringToInt(poolId),
@@ -107,25 +112,28 @@ func (s *poolService) UpdatePoolInfo(contractAddress, network, chainId string) {
 			JpCoin:                 baseInfo.JpCoin.String(),
 			AutoLiquidateThreshold: baseInfo.AutoLiquidateThreshold.String(),
 		}
-
+		// 获取借贷池MD5
 		hasInfoData, byteBaseInfoStr, baseInfoMd5Str := s.GetPoolMd5(&poolBase, "base_info:pool_"+chainId+"_"+poolId)
-		if !hasInfoData || (baseInfoMd5Str != byteBaseInfoStr) { // have new data
-			//tokenInfo
+		// 判断是否存在或发生变化
+		if !hasInfoData || (baseInfoMd5Str != byteBaseInfoStr) {
+			// 保存借贷池基础信息
 			err = models.NewPoolBase().SavePoolBase(chainId, poolId, &poolBase)
 			if err != nil {
 				log.Logger.Sugar().Error("SavePoolBase err ", chainId, poolId)
 			}
-			_ = db.RedisSet("base_info:pool_"+chainId+"_"+poolId, baseInfoMd5Str, 60*30) //The expiration time is set to prevent hsah collision
+			// 把MD5值存入redis
+			_ = db.RedisSet("base_info:pool_"+chainId+"_"+poolId, baseInfoMd5Str, 60*30)
 		}
-
+		// 获取借贷池数据信息
 		dataInfo, err := pledgePoolToken.PledgePoolTokenCaller.PoolDataInfo(nil, big.NewInt(int64(i)))
 		if err != nil {
 			log.Logger.Sugar().Info("UpdatePoolInfo PoolBaseInfo err", poolId, err)
 			continue
 		}
-
+		// 获取借贷池MD5
 		hasPoolData, byteDataInfoStr, dataInfoMd5Str := s.GetPoolMd5(&poolBase, "data_info:pool_"+chainId+"_"+poolId)
-		if !hasPoolData || (dataInfoMd5Str != byteDataInfoStr) { // have new data
+		if !hasPoolData || (dataInfoMd5Str != byteDataInfoStr) {
+			// 保存借贷池数据信息
 			poolData := models.PoolData{
 				PoolId:                 poolId,
 				ChainId:                chainId,
@@ -140,11 +148,13 @@ func (s *poolService) UpdatePoolInfo(contractAddress, network, chainId string) {
 			if err != nil {
 				log.Logger.Sugar().Error("SavePoolData err ", chainId, poolId)
 			}
+			// 把MD5值存入redis
 			_ = db.RedisSet("data_info:pool_"+chainId+"_"+poolId, dataInfoMd5Str, 60*30) //The expiration time is set to prevent hsah collision
 		}
 	}
 }
 
+// 获取借贷池MD5
 func (s *poolService) GetPoolMd5(baseInfo *models.PoolBase, key string) (bool, string, string) {
 	baseInfoBytes, _ := json.Marshal(baseInfo)
 	baseInfoMd5Str := utils.Md5(string(baseInfoBytes))

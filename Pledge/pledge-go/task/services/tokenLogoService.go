@@ -22,27 +22,29 @@ func NewTokenLogo() *TokenLogo {
 
 // 更新代币Logo
 func (s *TokenLogo) UpdateTokenLogo() {
-	// update remote logo
+	// 下载远程logo json
 	res, err := utils.HttpGet(config.Config.Token.LogoUrl, map[string]string{})
 	if err != nil {
 		log.Logger.Sugar().Info("UpdateTokenLogo HttpGet err", err)
 	} else {
+		// 转换下载信息到结构体
 		tokenLogoRemote := models.TokenLogoRemote{}
 		err = json.Unmarshal(res, &tokenLogoRemote)
 		if err != nil {
 			log.Logger.Sugar().Error("UpdateTokenLogo json.Unmarshal err ", err)
 			return
 		}
+		// 遍历远程logo信息
 		for _, t := range tokenLogoRemote.Tokens {
-
-			hasNewData, err := s.CheckLogoData(t.Address, utils.IntToString(t.ChainID), t.LogoURI, t.Symbol)
-			if err != nil {
+			// 处理logo数据
+			hasNewData, err := s.HandleLogoData(t.Address, utils.IntToString(t.ChainID), t.LogoURI, t.Symbol)
+			if !hasNewData || err != nil {
 				log.Logger.Sugar().Error("UpdateTokenLogo CheckLogoData err ", err)
 				continue
 			}
-
+			// 检查logo数据
 			if hasNewData {
-				err = s.SaveLogoData(t.Address, utils.IntToString(t.ChainID), t.LogoURI, t.Symbol, t.Decimals)
+				err = s.CheckLogoData(t.Address, utils.IntToString(t.ChainID), t.LogoURI, t.Symbol, t.Decimals)
 				if err != nil {
 					log.Logger.Sugar().Error("UpdateTokenLogo SaveLogoData err ", err)
 					continue
@@ -50,20 +52,20 @@ func (s *TokenLogo) UpdateTokenLogo() {
 			}
 		}
 	}
-
-	//update local logo,Local logos have high weight,so execute later, local logos are divided by name
+	// 更新本地徽标，本地徽标具有很高的权重，因此稍后执行，本地徽标按名称划分
 	for _, v := range LocalTokenLogo {
 		for _, t := range v {
 			if t["token"] == "" {
 				continue
 			}
-			hasNewData, err := s.CheckLogoData(t["token"], t["chain_id"], t["logo"], t["symbol"])
+			// 处理logo数据
+			hasNewData, err := s.HandleLogoData(t["token"], t["chain_id"], t["logo"], t["symbol"])
 			if err != nil {
 				continue
 			}
-
+			// 检查logo数据
 			if hasNewData {
-				err = s.SaveLogoData(t["token"], t["chain_id"], t["logo"], t["symbol"], utils.StringToInt(t["decimals"]))
+				err = s.CheckLogoData(t["token"], t["chain_id"], t["logo"], t["symbol"], utils.StringToInt(t["decimals"]))
 				if err != nil {
 					log.Logger.Sugar().Error("UpdateTokenLogo SaveLogoData err ", err)
 					continue
@@ -73,19 +75,23 @@ func (s *TokenLogo) UpdateTokenLogo() {
 	}
 }
 
-// CheckLogoData Saving logo data to redis if it has new logo
-func (s *TokenLogo) CheckLogoData(token, chainId, logoUrl, symbol string) (bool, error) {
+// 处理logo数据
+func (s *TokenLogo) HandleLogoData(token, chainId, logoUrl, symbol string) (bool, error) {
+	// 读取redis数据
 	redisKey := "token_info:" + chainId + ":" + token
 	redisTokenInfoBytes, err := db.RedisGet(redisKey)
 	if err != nil {
 		log.Logger.Error(err.Error())
 		return false, err
 	}
+	// 判断redis是否存在
 	if len(redisTokenInfoBytes) <= 0 {
+		// 保存mysql
 		err = s.CheckTokenInfo(token, chainId)
 		if err != nil {
 			log.Logger.Error(err.Error())
 		}
+		// 保存redis
 		err = db.RedisSet(redisKey, models.RedisTokenInfo{
 			Token:   token,
 			ChainId: chainId,
@@ -97,19 +103,20 @@ func (s *TokenLogo) CheckLogoData(token, chainId, logoUrl, symbol string) (bool,
 			return false, err
 		}
 	} else {
+		// 转换redis数据到结构体
 		redisTokenInfo := models.RedisTokenInfo{}
 		err = json.Unmarshal(redisTokenInfoBytes, &redisTokenInfo)
 		if err != nil {
 			log.Logger.Error(err.Error())
 			return false, err
 		}
-
+		// 更换logo url
 		if redisTokenInfo.Logo == logoUrl {
 			return false, nil
 		}
-
 		redisTokenInfo.Logo = logoUrl
 		redisTokenInfo.Symbol = symbol
+		// 保存redis
 		err = db.RedisSet(redisKey, redisTokenInfo, 0)
 		if err != nil {
 			log.Logger.Error(err.Error())
@@ -142,8 +149,8 @@ func (s *TokenLogo) CheckTokenInfo(token, chainId string) error {
 	return nil
 }
 
-// SaveLogoData Saving logo data to mysql if it has new logo
-func (s *TokenLogo) SaveLogoData(token, chainId, logoUrl, symbol string, decimals int) error {
+// 检查logo数据
+func (s *TokenLogo) CheckLogoData(token, chainId, logoUrl, symbol string, decimals int) error {
 	nowDateTime := utils.GetCurDateTimeFormat()
 
 	err := db.Mysql.Table("token_info").Where("token=? and chain_id=? ", token, chainId).Updates(map[string]interface{}{
