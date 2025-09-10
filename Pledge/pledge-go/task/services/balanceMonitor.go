@@ -20,7 +20,7 @@ func NewBalanceMonitor() *BalanceMonitor {
 	return &BalanceMonitor{}
 }
 
-// Monitor Sending email when balance is insufficient
+// 监控余额不足时发送电子邮件
 func (s *BalanceMonitor) Monitor() {
 
 	//check on bsc test-net

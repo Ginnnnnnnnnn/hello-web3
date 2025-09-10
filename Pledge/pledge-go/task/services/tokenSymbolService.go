@@ -25,7 +25,7 @@ func NewTokenSymbol() *TokenSymbol {
 	return &TokenSymbol{}
 }
 
-// UpdateContractSymbol get contract symbol
+// 更新合约代币
 func (s *TokenSymbol) UpdateContractSymbol() {
 	var tokens []models.TokenInfo
 	db.Mysql.Table("token_info").Find(&tokens)
@@ -35,9 +35,13 @@ func (s *TokenSymbol) UpdateContractSymbol() {
 			continue
 		}
 		err := errors.New("")
+		if err != nil {
+			log.Logger.Sugar().Error("UpdateContractSymbol err ", t.Symbol, t.ChainId, err)
+			continue
+		}
 		symbol := ""
 		if t.ChainId == config.Config.TestNet.ChainId {
-			err, symbol = s.GetContractSymbolOnTestNet(t.Token, config.Config.TestNet.NetUrl)
+			symbol, err = s.GetContractSymbolOnTestNet(t.Token, config.Config.TestNet.NetUrl)
 		} else if t.ChainId == config.Config.MainNet.ChainId {
 			if t.AbiFileExist == 0 {
 				err = s.GetRemoteAbiFileByToken(t.Token, t.ChainId)
@@ -46,7 +50,7 @@ func (s *TokenSymbol) UpdateContractSymbol() {
 					continue
 				}
 			}
-			err, symbol = s.GetContractSymbolOnMainNet(t.Token, config.Config.MainNet.NetUrl)
+			symbol, err = s.GetContractSymbolOnMainNet(t.Token, config.Config.MainNet.NetUrl)
 		} else {
 			log.Logger.Sugar().Error("UpdateContractSymbol chain_id err ", t.Symbol, t.ChainId)
 			continue
@@ -132,76 +136,70 @@ func (s *TokenSymbol) FormatAbiJsonStr(result string) string {
 	return resStr
 }
 
-// GetContractSymbolOnMainNet get contract symbol on main net
-func (s *TokenSymbol) GetContractSymbolOnMainNet(token, network string) (error, string) {
+// 获取合同代币-主网
+func (s *TokenSymbol) GetContractSymbolOnMainNet(token, network string) (string, error) {
 	ethereumConn, err := ethclient.Dial(network)
 	if nil != err {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
+		return "", err
 	}
 	abiStr, err := abifile.GetAbiByToken(token)
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
+		return "", err
 	}
 	parsed, err := abi.JSON(strings.NewReader(abiStr))
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
+		return "", err
 	}
-	contract, err := bind.NewBoundContract(common.HexToAddress(token), parsed, ethereumConn, ethereumConn, ethereumConn), nil
-	if err != nil {
-		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
-	}
-
+	contract := bind.NewBoundContract(common.HexToAddress(token), parsed, ethereumConn, ethereumConn, ethereumConn)
 	res := make([]interface{}, 0)
 	err = contract.Call(nil, &res, "symbol")
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", err)
-		return err, ""
+		return "", err
 	}
 
-	return nil, res[0].(string)
+	return res[0].(string), nil
 }
 
-// GetContractSymbolOnTestNet get contract symbol on test net
-func (s *TokenSymbol) GetContractSymbolOnTestNet(token, network string) (error, string) {
+// 获取合同代币-测试网
+func (s *TokenSymbol) GetContractSymbolOnTestNet(token, network string) (string, error) {
 	ethereumConn, err := ethclient.Dial(network)
 	if nil != err {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
+		return "", err
 	}
 	abiStr, err := abifile.GetAbiByToken("erc20")
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
+		return "", err
 	}
 	parsed, err := abi.JSON(strings.NewReader(abiStr))
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
+		return "", err
 	}
-	contract, err := bind.NewBoundContract(common.HexToAddress(token), parsed, ethereumConn, ethereumConn, ethereumConn), nil
-	if err != nil {
-		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
-	}
-
+	contract := bind.NewBoundContract(common.HexToAddress(token), parsed, ethereumConn, ethereumConn, ethereumConn)
 	res := make([]interface{}, 0)
 	err = contract.Call(nil, &res, "symbol")
 	if err != nil {
 		log.Logger.Sugar().Error("GetContractSymbolOnMainNet err ", token, err)
-		return err, ""
+		return "", err
 	}
 
-	return nil, res[0].(string)
+	return res[0].(string), nil
 }
 
 // CheckSymbolData Saving symbol data to redis if it has new symbol
 func (s *TokenSymbol) CheckSymbolData(token, chainId, symbol string) (bool, error) {
 	redisKey := "token_info:" + chainId + ":" + token
 	redisTokenInfoBytes, err := db.RedisGet(redisKey)
+	if err != nil {
+		log.Logger.Error(err.Error())
+		return false, err
+	}
 	if len(redisTokenInfoBytes) <= 0 {
 		err = s.CheckTokenInfo(token, chainId)
 		if err != nil {

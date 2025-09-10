@@ -29,7 +29,7 @@ func NewTokenPrice() *TokenPrice {
 	return &TokenPrice{}
 }
 
-// UpdateContractPrice update contract price
+// 更新合约价格
 func (s *TokenPrice) UpdateContractPrice() {
 	var tokens []models.TokenInfo
 	db.Mysql.Table("token_info").Find(&tokens)
@@ -42,9 +42,10 @@ func (s *TokenPrice) UpdateContractPrice() {
 			log.Logger.Sugar().Error("UpdateContractPrice token empty ", t.Symbol, t.ChainId)
 			continue
 		} else {
-			if t.ChainId == config.Config.TestNet.ChainId {
-				err, price = s.GetTestNetTokenPrice(t.Token)
-			} else if t.ChainId == "56" {
+			switch t.ChainId {
+			case config.Config.TestNet.ChainId:
+				price, err = s.GetTestNetTokenPrice(t.Token)
+			case "56":
 				// if strings.ToUpper(t.Token) == config.Config.MainNet.PlgrAddress { // get PLGR price from ku-coin(Only main network price)
 				// 	priceStr, _ := db.RedisGetString("plgr_price")
 				// 	priceF, _ := decimal.NewFromString(priceStr)
@@ -56,7 +57,6 @@ func (s *TokenPrice) UpdateContractPrice() {
 				// }
 
 				//err, price = s.GetMainNetTokenPrice(t.Token)
-
 			}
 
 			if err != nil {
@@ -82,55 +82,58 @@ func (s *TokenPrice) UpdateContractPrice() {
 }
 
 // GetMainNetTokenPrice get contract price on main net
-func (s *TokenPrice) GetMainNetTokenPrice(token string) (error, int64) {
+func (s *TokenPrice) GetMainNetTokenPrice(token string) (int64, error) {
 	ethereumConn, err := ethclient.Dial(config.Config.MainNet.NetUrl)
 	if nil != err {
 		log.Logger.Error(err.Error())
-		return err, 0
+		return 0, err
 	}
 
 	bscPledgeOracleMainNetToken, err := bindings.NewBscPledgeOracleMainnetToken(common.HexToAddress(config.Config.MainNet.BscPledgeOracleToken), ethereumConn)
 	if nil != err {
 		log.Logger.Error(err.Error())
-		return err, 0
+		return 0, err
 	}
 
 	price, err := bscPledgeOracleMainNetToken.GetPrice(nil, common.HexToAddress(token))
 	if err != nil {
 		log.Logger.Error(err.Error())
-		return err, 0
+		return 0, err
 	}
 
-	return nil, price.Int64()
+	return price.Int64(), nil
 }
 
-// GetTestNetTokenPrice get contract price on test net
-func (s *TokenPrice) GetTestNetTokenPrice(token string) (error, int64) {
+// 获取合约价格-测试网
+func (s *TokenPrice) GetTestNetTokenPrice(token string) (int64, error) {
 	ethereumConn, err := ethclient.Dial(config.Config.TestNet.NetUrl)
 	if nil != err {
 		log.Logger.Error(err.Error())
-		return err, 0
+		return 0, err
 	}
 
 	bscPledgeOracleTestnetToken, err := bindings.NewBscPledgeOracleTestnetToken(common.HexToAddress(config.Config.TestNet.BscPledgeOracleToken), ethereumConn)
 	if nil != err {
 		log.Logger.Error(err.Error())
-		return err, 0
+		return 0, err
 	}
 
 	price, err := bscPledgeOracleTestnetToken.GetPrice(nil, common.HexToAddress(token))
 	if nil != err {
 		log.Logger.Error(err.Error())
-		return err, 0
+		return 0, err
 	}
 
-	return nil, price.Int64()
+	return price.Int64(), nil
 }
 
-// CheckPriceData Saving price data to redis if it has new price
+// 校验价格数据
 func (s *TokenPrice) CheckPriceData(token, chainId, price string) (bool, error) {
 	redisKey := "token_info:" + chainId + ":" + token
 	redisTokenInfoBytes, err := db.RedisGet(redisKey)
+	if err != nil {
+		log.Logger.Error(err.Error())
+	}
 	if len(redisTokenInfoBytes) <= 0 {
 		err = s.CheckTokenInfo(token, chainId)
 		if err != nil {
@@ -262,7 +265,7 @@ func (s *TokenPrice) SavePlgrPrice() {
 	log.Logger.Sugar().Info("GetMainNetTokenPrice ", a, d)
 }
 
-// SavePlgrPriceTestNet  Saving price data to mysql if it has new price
+// 保存plgr价格-测试网
 func (s *TokenPrice) SavePlgrPriceTestNet() {
 
 	price := 22222

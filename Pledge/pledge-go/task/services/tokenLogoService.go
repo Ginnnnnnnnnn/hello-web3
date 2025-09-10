@@ -20,8 +20,8 @@ func NewTokenLogo() *TokenLogo {
 	return &TokenLogo{}
 }
 
+// 更新代币Logo
 func (s *TokenLogo) UpdateTokenLogo() {
-
 	// update remote logo
 	res, err := utils.HttpGet(config.Config.Token.LogoUrl, map[string]string{})
 	if err != nil {
@@ -77,6 +77,10 @@ func (s *TokenLogo) UpdateTokenLogo() {
 func (s *TokenLogo) CheckLogoData(token, chainId, logoUrl, symbol string) (bool, error) {
 	redisKey := "token_info:" + chainId + ":" + token
 	redisTokenInfoBytes, err := db.RedisGet(redisKey)
+	if err != nil {
+		log.Logger.Error(err.Error())
+		return false, err
+	}
 	if len(redisTokenInfoBytes) <= 0 {
 		err = s.CheckTokenInfo(token, chainId)
 		if err != nil {

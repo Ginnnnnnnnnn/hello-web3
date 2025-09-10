@@ -21,16 +21,15 @@ func NewPool() *poolService {
 	return &poolService{}
 }
 
+// 更新全部交易池信息
 func (s *poolService) UpdateAllPoolInfo() {
-
+	// 测试网
 	s.UpdatePoolInfo(config.Config.TestNet.PledgePoolToken, config.Config.TestNet.NetUrl, config.Config.TestNet.ChainId)
-
+	// 主网
 	// s.UpdatePoolInfo(config.Config.MainNet.PledgePoolToken, config.Config.MainNet.NetUrl, config.Config.MainNet.ChainId)
-
 }
 
 func (s *poolService) UpdatePoolInfo(contractAddress, network, chainId string) {
-
 	log.Logger.Sugar().Info("UpdatePoolInfo ", contractAddress+" "+network)
 	ethereumConn, err := ethclient.Dial(network)
 	if nil != err {
@@ -42,13 +41,18 @@ func (s *poolService) UpdatePoolInfo(contractAddress, network, chainId string) {
 		log.Logger.Error(err.Error())
 		return
 	}
-
 	// borrowFee
 	borrowFee, err := pledgePoolToken.PledgePoolTokenCaller.BorrowFee(nil)
-
+	if err != nil {
+		log.Logger.Error(err.Error())
+		return
+	}
 	// lendFee
 	lendFee, err := pledgePoolToken.PledgePoolTokenCaller.LendFee(nil)
-
+	if err != nil {
+		log.Logger.Error(err.Error())
+		return
+	}
 	//poolLength
 	pLength, err := pledgePoolToken.PledgePoolTokenCaller.PoolLength(nil)
 	if nil != err {
