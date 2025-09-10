@@ -14,8 +14,6 @@ func InitRoute(e *gin.Engine) *gin.Engine {
 	// 版本分组
 	v2Group := e.Group("/api/v" + config.Config.Env.Version)
 
-	//====================================== web ======================================
-
 	// 借贷池
 	poolController := controllers.PoolController{}
 	v2Group.GET("/poolBaseInfo", poolController.PoolBaseInfo)
@@ -28,17 +26,15 @@ func InitRoute(e *gin.Engine) *gin.Engine {
 	priceController := controllers.PriceController{}
 	v2Group.GET("/price", priceController.NewPrice)
 
-	//====================================== admin ======================================
-
-	// 多签
+	// 多签名钱包
 	multiSignPoolController := controllers.MultiSignPoolController{}
-	v2Group.POST("/pool/setMultiSign", middlewares.CheckToken(), multiSignPoolController.SetMultiSign) //multi-sign set
-	v2Group.POST("/pool/getMultiSign", middlewares.CheckToken(), multiSignPoolController.GetMultiSign) //multi-sign get
+	v2Group.POST("/pool/setMultiSign", middlewares.CheckToken(), multiSignPoolController.SetMultiSign)
+	v2Group.POST("/pool/getMultiSign", middlewares.CheckToken(), multiSignPoolController.GetMultiSign)
 
 	// 用户
 	userController := controllers.UserController{}
-	v2Group.POST("/user/login", userController.Login)                             // login
-	v2Group.POST("/user/logout", middlewares.CheckToken(), userController.Logout) // logout
+	v2Group.POST("/user/login", userController.Login)
+	v2Group.POST("/user/logout", middlewares.CheckToken(), userController.Logout)
 
 	return e
 }

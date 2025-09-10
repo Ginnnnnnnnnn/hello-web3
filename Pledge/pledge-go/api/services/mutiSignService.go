@@ -14,7 +14,7 @@ func NewMutiSign() *MutiSignService {
 	return &MutiSignService{}
 }
 
-// SetMultiSign Set Multi-Sign
+// 设置多签名钱包
 func (c *MutiSignService) SetMultiSign(mutiSign *request.SetMultiSign) (int, error) {
 	//db set
 	err := models.NewMultiSign().Set(mutiSign)
@@ -24,9 +24,9 @@ func (c *MutiSignService) SetMultiSign(mutiSign *request.SetMultiSign) (int, err
 	return statecode.CommonSuccess, nil
 }
 
-// GetMultiSign Get Multi-Sign
+// 查询多签名钱包
 func (c *MutiSignService) GetMultiSign(mutiSign *response.MultiSign, chainId int) (int, error) {
-	//db get
+	// 查询
 	multiSignModel := models.NewMultiSign()
 	err := multiSignModel.Get(chainId)
 	if err != nil {
@@ -34,7 +34,7 @@ func (c *MutiSignService) GetMultiSign(mutiSign *response.MultiSign, chainId int
 	}
 	var multiSignAccount []string
 	_ = json.Unmarshal([]byte(multiSignModel.MultiSignAccount), &multiSignAccount)
-
+	// 转换结构体
 	mutiSign.SpName = multiSignModel.SpName
 	mutiSign.SpToken = multiSignModel.SpToken
 	mutiSign.JpName = multiSignModel.JpName

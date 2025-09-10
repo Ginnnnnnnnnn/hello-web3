@@ -18,10 +18,11 @@ const ErrorCode = -1
 
 type Server struct {
 	sync.Mutex
-	Id       string
-	Socket   *websocket.Conn
-	Send     chan []byte
-	LastTime int64 // last send time
+	Id     string
+	Socket *websocket.Conn
+	Send   chan []byte
+	// 最后发送消息时间
+	LastTime int64
 }
 
 type ServerManager struct {
@@ -56,20 +57,23 @@ func (s *Server) SendToClient(data string, code int) {
 }
 
 func (s *Server) ReadAndWrite() {
-
+	// 异常通道
 	errChan := make(chan error)
 
+	// 管理链接
 	Manager.Servers.Store(s.Id, s)
 
+	// 关闭资源
 	defer func() {
 		Manager.Servers.Delete(s)
 		_ = s.Socket.Close()
 		close(s.Send)
 	}()
 
-	//write
+	// 写
 	go func() {
 		for {
+			// 监听发送通道
 			message, ok := <-s.Send
 			if !ok {
 				errChan <- errors.New("write message error")
@@ -79,42 +83,43 @@ func (s *Server) ReadAndWrite() {
 		}
 	}()
 
-	//read
+	// 读
 	go func() {
 		for {
-
+			// 读取消息
 			_, message, err := s.Socket.ReadMessage()
 			if err != nil {
 				log.Logger.Sugar().Error(s.Id+" ReadMessage err ", err)
 				errChan <- err
 				return
 			}
-
-			//update heartbeat time
+			// 更新心跳时间
 			if string(message) == "ping" || string(message) == `"ping"` || string(message) == "'ping'" {
 				s.LastTime = time.Now().Unix()
 				s.SendToClient("pong", PongCode)
 			}
 			continue
-
 		}
 	}()
 
-	//check heartbeat
+	// 心跳检测
 	for {
 		select {
 		case <-time.After(time.Second):
+			// 每秒执行，检查最后发送消息时间是否>=超时时间，超时return
 			if time.Now().Unix()-s.LastTime >= UserPingPongDurTime {
 				s.SendToClient("heartbeat timeout", ErrorCode)
 				return
 			}
 		case err := <-errChan:
+			// 监听异常通道，有异常return
 			log.Logger.Sugar().Error(s.Id, " ReadAndWrite returned ", err)
 			return
 		}
 	}
 }
 
+// 开启websocket
 func StartServer() {
 	log.Logger.Info("WsServer start")
 	for {

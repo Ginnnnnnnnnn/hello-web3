@@ -3,9 +3,10 @@ package models
 import (
 	"encoding/json"
 	"errors"
-	"gorm.io/gorm"
 	"pledge-backend/api/models/request"
 	"pledge-backend/db"
+
+	"gorm.io/gorm"
 )
 
 // MultiSign multi-sign signature
@@ -27,7 +28,7 @@ func NewMultiSign() *MultiSign {
 	return &MultiSign{}
 }
 
-// Set Multi-Sign
+// 设置多签名钱包
 func (m *MultiSign) Set(multiSign *request.SetMultiSign) error {
 
 	MultiSignAccountByteArr, _ := json.Marshal(multiSign.MultiSignAccount)
@@ -53,7 +54,7 @@ func (m *MultiSign) Set(multiSign *request.SetMultiSign) error {
 	return nil
 }
 
-// Get Multi-Sign
+// 查询多签名钱包
 func (m *MultiSign) Get(chainId int) error {
 	err := db.Mysql.Table("multi_sign").Where("chain_id", chainId).First(&m).Debug().Error
 	if err != nil {

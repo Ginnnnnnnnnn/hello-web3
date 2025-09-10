@@ -16,16 +16,18 @@ func NewUser() *UserService {
 	return &UserService{}
 }
 
+// 登录
 func (s *UserService) Login(req *request.Login, result *response.Login) int {
 	log.Logger.Sugar().Info("contractService", req)
 	if req.Name == "admin" && req.Password == "password" {
+		// 创建token
 		token, err := utils.CreateToken(req.Name)
 		if err != nil {
 			log.Logger.Error("CreateToken" + err.Error())
 			return statecode.CommonErrServerErr
 		}
 		result.TokenId = token
-		//save to redis
+		// 保存登录信息redis
 		_ = db.RedisSet(req.Name, "login_ok", config.Config.Jwt.ExpireTime)
 		return statecode.CommonSuccess
 	} else {
