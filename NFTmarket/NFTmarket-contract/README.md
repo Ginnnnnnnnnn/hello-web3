@@ -34,7 +34,34 @@
 - **NFT 订单在链下**: 非dex
 - **NFT 订单在链上**: dex
 - **订单簿 OrderBook**: Maker, Taker: 用户; 价格确定于订单
-- **做市商 AMM**: ERC721——AMM: Maker, Taker: 一方是池子, 一方是用户; 价格是随池子变化的;
+- **做市商 AMM**: ERC721——AMM: Maker，Taker: 一方是池子，一方是用户，价格是随池子变化的
+
+## 合约核心
+
+基于智能合约实现基于订单簿模型的 NFT 交易系统, 即能够支持以下写入操作和查询操作。
+
+### 1. 写入操作
+
+链上订单簿(OrderBook DEX)支持 create limit sell/buy, market sell/buy order, edit(cancel&create)/cancel order 功能。
+
+- limit sell order
+- limit buy order
+- market sell order
+- market buy order
+- edit/cancel order
+
+### 2. 查询操作
+
+- 支持从链上查询订单（包括已经过期订单）
+
+## 合约构成
+
+- OrderBookExchange 实现完整的订单簿交易逻辑
+  - OrderStorage 用于存储订单信息的模块
+  - OrderValidator 用于处理订单逻辑验证的模块
+  - ProtocolManager 用于管理协议费的模块
+  - ...
+- OrderVault 独立存储订单相关资产的模块
 
 ## 运行准备
 

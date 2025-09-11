@@ -1,8 +1,8 @@
 # NFTMarket系统文档
 
-- **NFTmarket-backend：** 后端代码
+- **NFTmarket-backend：** 后端代码（API服务）
 - **NFTmarket-base：** 后端代码
-- **NFTmarket-sync：** 后端代码
+- **NFTmarket-sync：** 后端代码（交易同步服务）
 - **NFTmarket-contract：** 合约代码
 - **NFTmarket-web：** 前端代码
 
