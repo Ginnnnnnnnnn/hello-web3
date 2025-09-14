@@ -17,17 +17,17 @@ interface IEasySwapVault {
     ) external view returns (uint256 ETHAmount, uint256 tokenId);
 
     /**
-     * @notice Deposit ETH to the order when creating a Bid order.
-     * @param orderKey The unique id of the order.
-     * @param ETHAmount The amount of ETH to deposit.
+     * @notice 创建竞价订单时，将ETH存入订单。
+     * @param orderKey 订单ID
+     * @param ETHAmount ETH金额
      */
     function depositETH(OrderKey orderKey, uint256 ETHAmount) external payable;
 
     /**
-     * @notice Withdraw ETH from the order when the order is canceled or partly matched.
-     * @param orderKey The unique id of the order.
-     * @param ETHAmount The amount of ETH to withdraw.
-     * @param to The address to receive the ETH.
+     * @notice 当订单被取消或部分匹配时，从订单中提取ETH。
+     * @param orderKey 订单ID
+     * @param ETHAmount ETH金额
+     * @param to 退回地址
      */
     function withdrawETH(
         OrderKey orderKey,
@@ -36,11 +36,11 @@ interface IEasySwapVault {
     ) external;
 
     /**
-     * @notice Deposit NFT to the order when creating a List order.
-     * @param orderKey The unique id of the order.
-     * @param from The address of the NFT owner.
-     * @param collection The address of the NFT collection.
-     * @param tokenId The tokenId of the NFT.
+     * @notice 创建列表订单时，将NFT存入订单。
+     * @param orderKey 订单ID
+     * @param from NFT owner
+     * @param collection NFT管理合约
+     * @param tokenId tokenId
      */
     function depositNFT(
         OrderKey orderKey,
@@ -50,11 +50,11 @@ interface IEasySwapVault {
     ) external;
 
     /**
-     * @notice Withdraw NFT from the order when the order is canceled.
-     * @param orderKey The unique id of the order.
-     * @param to The address to receive the NFT.
-     * @param collection The address of the NFT collection.
-     * @param tokenId The tokenId of the NFT.
+     * @notice 当订单被取消时，从订单中退回NFT。
+     * @param orderKey 订单ID
+     * @param to 退回地址
+     * @param collection NFT管理合约
+     * @param tokenId tokenId
      */
     function withdrawNFT(
         OrderKey orderKey,
@@ -64,19 +64,19 @@ interface IEasySwapVault {
     ) external;
 
     /**
-     * @notice Edit the order's NFT when editing order.
-     * @param oldOrderKey The unique id of the order.
-     * @param newOrderKey The new unique id of the order.
+     * @notice 编辑订单时编辑订单的NFT。
+     * @param oldOrderKey 旧订单ID
+     * @param newOrderKey 新订单ID
      */
     function editNFT(OrderKey oldOrderKey, OrderKey newOrderKey) external;
 
     /**
-     * @notice Edit the order's ETH when editing order.
-     * @param oldOrderKey The unique id of the order.
-     * @param newOrderKey The new unique id of the order.
-     * @param oldETHAmount The old amount of ETH in the order.
-     * @param newETHAmount The new amount of ETH in the order.
-     * @param to The address to receive the ETH.
+     * @notice 编辑订单时编辑订单的ETH。
+     * @param oldOrderKey 旧订单ID
+     * @param newOrderKey 新订单ID
+     * @param oldETHAmount 旧订单ETH
+     * @param newETHAmount 新订单ETH
+     * @param to 回退ETH地址
      */
     function editETH(
         OrderKey oldOrderKey,
@@ -97,10 +97,10 @@ interface IEasySwapVault {
     ) external;
 
     /**
-     * @notice Transfer ERC721 NFT.
-     * @param from The address of the NFT owner.
-     * @param to The address to receive the NFT.
-     * @param assets The NFT info.
+     * @dev 转账NFT
+     * @param from from
+     * @param from to
+     * @param from NFT资产
      */
     function transferERC721(
         address from,

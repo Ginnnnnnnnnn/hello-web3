@@ -16,10 +16,11 @@ library LibOrder {
         FixedPriceForItem
     }
 
+    // NFT资产信息
     struct Asset {
-        uint256 tokenId;
-        address collection;
-        uint96 amount;
+        uint256 tokenId; // tokenId
+        address collection; // NFT管理合约地址
+        uint96 amount; // 数量
     }
 
     struct NFTInfo {
@@ -27,14 +28,15 @@ library LibOrder {
         uint256 tokenId;
     }
 
+    // 订单信息
     struct Order {
-        Side side;
-        SaleKind saleKind;
-        address maker;
-        Asset nft;
-        Price price; // unit price of nft
-        uint64 expiry;
-        uint64 salt;
+        Side side; // 订单方 List-挂单 Bid-买单
+        SaleKind saleKind; // 方式 FixedPriceForCollection-打包售卖 FixedPriceForItem-单个售卖
+        address maker; // 创建用户地址
+        Asset nft; // NFT资产信息
+        Price price; // NFT价格
+        uint64 expiry; // 过期事件
+        uint64 salt; // 盐
     }
 
     struct DBOrder {
@@ -42,10 +44,10 @@ library LibOrder {
         OrderKey next;
     }
 
-    /// @dev Order queue: used to store orders of the same price
+    // 订单队列：用于存储相同价格的订单
     struct OrderQueue {
-        OrderKey head;
-        OrderKey tail;
+        OrderKey head; // 头
+        OrderKey tail; // 尾
     }
 
     struct EditDetail {
@@ -58,6 +60,7 @@ library LibOrder {
         LibOrder.Order buyOrder;
     }
 
+    // 空ID
     OrderKey public constant ORDERKEY_SENTINEL = OrderKey.wrap(0x0);
 
     bytes32 public constant ASSET_TYPEHASH =

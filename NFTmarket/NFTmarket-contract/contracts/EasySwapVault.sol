@@ -8,12 +8,18 @@ import {LibOrder, OrderKey} from "./libraries/LibOrder.sol";
 
 import {IEasySwapVault} from "./interface/IEasySwapVault.sol";
 
+// 资产管理合约
+// IEasySwapVault 资产管理合约-接口
+// OwnableUpgradeable 可升级合约-owner
 contract EasySwapVault is IEasySwapVault, OwnableUpgradeable {
     using LibTransferSafeUpgradeable for address;
     using LibTransferSafeUpgradeable for IERC721;
 
+    // 订单薄合约地址
     address public orderBook;
+    // 订单ETH
     mapping(OrderKey => uint256) public ETHBalance;
+    // 订单NFT
     mapping(OrderKey => uint256) public NFTBalance;
 
     modifier onlyEasySwapOrderBook() {
@@ -37,6 +43,11 @@ contract EasySwapVault is IEasySwapVault, OwnableUpgradeable {
         tokenId = NFTBalance[orderKey];
     }
 
+    /**
+     * @notice 创建竞价订单时，将ETH存入订单。
+     * @param orderKey 订单ID
+     * @param ETHAmount ETH金额
+     */
     function depositETH(
         OrderKey orderKey,
         uint256 ETHAmount
@@ -45,6 +56,12 @@ contract EasySwapVault is IEasySwapVault, OwnableUpgradeable {
         ETHBalance[orderKey] += msg.value;
     }
 
+    /**
+     * @notice 当订单被取消或部分匹配时，从订单中提取ETH。
+     * @param orderKey 订单ID
+     * @param ETHAmount ETH金额
+     * @param to 退回地址
+     */
     function withdrawETH(
         OrderKey orderKey,
         uint256 ETHAmount,
@@ -54,6 +71,13 @@ contract EasySwapVault is IEasySwapVault, OwnableUpgradeable {
         to.safeTransferETH(ETHAmount);
     }
 
+    /**
+     * @notice 创建列表订单时，将NFT存入订单。
+     * @param orderKey 订单ID
+     * @param from NFT owner
+     * @param collection NFT collection
+     * @param tokenId tokenId
+     */
     function depositNFT(
         OrderKey orderKey,
         address from,
@@ -61,10 +85,16 @@ contract EasySwapVault is IEasySwapVault, OwnableUpgradeable {
         uint256 tokenId
     ) external onlyEasySwapOrderBook {
         IERC721(collection).safeTransferNFT(from, address(this), tokenId);
-
         NFTBalance[orderKey] = tokenId;
     }
 
+    /**
+     * @notice 当订单被取消时，从订单中退回NFT。
+     * @param orderKey 订单ID
+     * @param to 退回地址
+     * @param collection NFT管理合约
+     * @param tokenId tokenId
+     */
     function withdrawNFT(
         OrderKey orderKey,
         address to,
@@ -77,6 +107,14 @@ contract EasySwapVault is IEasySwapVault, OwnableUpgradeable {
         IERC721(collection).safeTransferNFT(address(this), to, tokenId);
     }
 
+    /**
+     * @notice 编辑订单时编辑订单的ETH。
+     * @param oldOrderKey 旧订单ID
+     * @param newOrderKey 新订单ID
+     * @param oldETHAmount 旧订单ETH
+     * @param newETHAmount 新订单ETH
+     * @param to 回退ETH地址
+     */
     function editETH(
         OrderKey oldOrderKey,
         OrderKey newOrderKey,
@@ -99,6 +137,11 @@ contract EasySwapVault is IEasySwapVault, OwnableUpgradeable {
         }
     }
 
+    /**
+     * @notice 编辑订单时编辑订单的NFT。
+     * @param oldOrderKey 旧订单ID
+     * @param newOrderKey 新订单ID
+     */
     function editNFT(
         OrderKey oldOrderKey,
         OrderKey newOrderKey
@@ -107,6 +150,12 @@ contract EasySwapVault is IEasySwapVault, OwnableUpgradeable {
         delete NFTBalance[oldOrderKey];
     }
 
+    /**
+     * @dev 转账NFT
+     * @param from from
+     * @param from to
+     * @param from NFT资产
+     */
     function transferERC721(
         address from,
         address to,

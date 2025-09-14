@@ -10,6 +10,8 @@ import {LibOrder, OrderKey} from "./libraries/LibOrder.sol";
 
 error CannotInsertDuplicateOrder(OrderKey orderKey);
 
+// 订单存储合约
+// Initializable 可升级合约
 contract OrderStorage is Initializable {
     using RedBlackTreeLibrary for RedBlackTreeLibrary.Tree;
 
@@ -59,6 +61,10 @@ contract OrderStorage is Initializable {
         }
     }
 
+    /**
+     * @dev 添加订单
+     * @param order 订单信息
+     */
     function _addOrder(
         LibOrder.Order memory order
     ) internal returns (OrderKey orderKey) {
@@ -68,22 +74,21 @@ contract OrderStorage is Initializable {
         if (orders[orderKey].order.maker != address(0)) {
             revert CannotInsertDuplicateOrder(orderKey);
         }
-
-        // insert price to price tree if not exists
+        // 如果价格树不存在，则将价格插入价格树
         RedBlackTreeLibrary.Tree storage priceTree = priceTrees[
             order.nft.collection
         ][order.side];
         if (!priceTree.exists(order.price)) {
             priceTree.insert(order.price);
         }
-
-        // insert order to order queue
+        // 在订单队列获取订单
         LibOrder.OrderQueue storage orderQueue = orderQueues[
             order.nft.collection
         ][order.side][order.price];
-
-        if (LibOrder.isSentinel(orderQueue.head)) { // 队列是否初始化
-            orderQueues[order.nft.collection][order.side][ // 创建新的队列
+        // 判断是否需要初始化队列
+        if (LibOrder.isSentinel(orderQueue.head)) {
+            // 创建新的队列
+            orderQueues[order.nft.collection][order.side][
                 order.price
             ] = LibOrder.OrderQueue(
                 LibOrder.ORDERKEY_SENTINEL,
@@ -93,14 +98,17 @@ contract OrderStorage is Initializable {
                 order.price
             ];
         }
-        if (LibOrder.isSentinel(orderQueue.tail)) { // 队列是否为空
+        // 判断当前价格队列是否为空
+        if (LibOrder.isSentinel(orderQueue.tail)) {
+            // 队列是否为空
             orderQueue.head = orderKey;
             orderQueue.tail = orderKey;
             orders[orderKey] = LibOrder.DBOrder( // 创建新的订单，插入队列， 下一个订单为sentinel
-                order,
-                LibOrder.ORDERKEY_SENTINEL
-            );
-        } else { // 队列不为空
+                    order,
+                    LibOrder.ORDERKEY_SENTINEL
+                );
+        } else {
+            // 队列不为空
             orders[orderQueue.tail].next = orderKey; // 将新订单插入队列尾部
             orders[orderKey] = LibOrder.DBOrder(
                 order,
@@ -110,6 +118,10 @@ contract OrderStorage is Initializable {
         }
     }
 
+    /**
+     * @dev 删除订单
+     * @param order 订单信息
+     */
     function _removeOrder(
         LibOrder.Order memory order
     ) internal returns (OrderKey orderKey) {

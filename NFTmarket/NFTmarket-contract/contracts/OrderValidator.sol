@@ -8,9 +8,10 @@ import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/crypt
 import {Price} from "./libraries/RedBlackTreeLibrary.sol";
 import {LibOrder, OrderKey} from "./libraries/LibOrder.sol";
 
-/**
- * @title Verify the validity of the order parameters.
- */
+// 订单校验合约
+// Initializable 可升级合约
+// ContextUpgradeable 可升级合约-上下文
+// EIP712Upgradeable 可升级合约-EIP-712
 abstract contract OrderValidator is
     Initializable,
     ContextUpgradeable,
@@ -20,9 +21,9 @@ abstract contract OrderValidator is
 
     uint256 private constant CANCELLED = type(uint256).max;
 
-    // fillsStat record orders filled status, key is the order hash,
-    // and value is filled amount.
-    // Value CANCELLED means the order has been canceled.
+    // 记录订单状态
+    // 订单ID => 成功数量
+    // CANCELLED 为取消
     mapping(OrderKey => uint256) public filledAmount;
 
     function __OrderValidator_init(
@@ -49,7 +50,8 @@ abstract contract OrderValidator is
         require(order.maker != address(0), "OVa: miss maker");
         // Order must be started and not be expired.
 
-        if (!isSkipExpiry) { // Skip expiry check if true.
+        if (!isSkipExpiry) {
+            // Skip expiry check if true.
             require(
                 order.expiry == 0 || order.expiry > block.timestamp,
                 "OVa: expired"

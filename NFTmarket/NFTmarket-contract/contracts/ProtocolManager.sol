@@ -7,10 +7,10 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 
 import {LibPayInfo} from "./libraries/LibPayInfo.sol";
 
-abstract contract ProtocolManager is
-    Initializable,
-    OwnableUpgradeable
-{
+// 协议费管理合约
+// Initializable 可升级合约
+// OwnableUpgradeable 可升级合约-owner
+abstract contract ProtocolManager is Initializable, OwnableUpgradeable {
     uint128 public protocolShare;
 
     event LogUpdatedProtocolShare(uint128 indexed newProtocolShare);
@@ -19,9 +19,7 @@ abstract contract ProtocolManager is
         uint128 newProtocolShare
     ) internal onlyInitializing {
         // __Ownable_init(_msgSender());
-        __ProtocolManager_init_unchained(
-            newProtocolShare
-        );
+        __ProtocolManager_init_unchained(newProtocolShare);
     }
 
     function __ProtocolManager_init_unchained(
@@ -30,9 +28,7 @@ abstract contract ProtocolManager is
         _setProtocolShare(newProtocolShare);
     }
 
-    function setProtocolShare(
-        uint128 newProtocolShare
-    ) external onlyOwner {
+    function setProtocolShare(uint128 newProtocolShare) external onlyOwner {
         _setProtocolShare(newProtocolShare);
     }
 
