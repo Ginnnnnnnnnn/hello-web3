@@ -21,6 +21,7 @@ import (
 	"github.com/ProjectsTask/EasySwapBackend/src/types/v1"
 )
 
+// // 指定Collection的bids信息
 func GetBids(ctx context.Context, svcCtx *svc.ServerCtx, chain string, collectionAddr string, page, pageSize int) (*types.CollectionBidsResp, error) {
 	bids, count, err := svcCtx.Dao.QueryCollectionBids(ctx, chain, collectionAddr, page, pageSize)
 	if err != nil {
@@ -791,6 +792,7 @@ func RefreshItemMetadata(ctx context.Context, svcCtx *svc.ServerCtx, chainName s
 
 }
 
+// 获取NFT Item的图片信息
 func GetItemImage(ctx context.Context, svcCtx *svc.ServerCtx, chain string, collectionAddress, tokenId string) (*types.ItemImage, error) {
 	items, err := svcCtx.Dao.QueryCollectionItemsImage(ctx, chain, collectionAddress, []string{tokenId})
 	if err != nil || len(items) == 0 {

@@ -11,6 +11,7 @@ import (
 	"github.com/ProjectsTask/EasySwapBackend/src/types/v1"
 )
 
+// 登陆（获取用户信息）
 func UserLoginHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req := types.LoginReq{}
@@ -36,6 +37,7 @@ func UserLoginHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 登录（获取登录签名）
 func GetLoginMessageHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		address := c.Params.ByName("address")
@@ -54,6 +56,7 @@ func GetLoginMessageHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 获取用户签名状态
 func GetSigStatusHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userAddr := c.Params.ByName("address")

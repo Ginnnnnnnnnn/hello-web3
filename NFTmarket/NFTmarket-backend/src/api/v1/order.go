@@ -12,6 +12,7 @@ import (
 	"github.com/ProjectsTask/EasySwapBackend/src/types/v1"
 )
 
+// 批量查询出价信息
 func OrderInfosHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterParam := c.Query("filters")

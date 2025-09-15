@@ -27,7 +27,7 @@ var DaemonCmd = &cobra.Command{
 		wg.Add(1)
 		ctx := context.Background()
 		ctx, cancel := context.WithCancel(ctx)
-
+		defer cancel()
 		// rpc退出信号通知chan
 		onSyncExit := make(chan error, 1)
 
@@ -67,9 +67,8 @@ var DaemonCmd = &cobra.Command{
 				http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", cfg.Monitor.PprofPort), nil)
 			}
 		}()
-
 		// 信号通知chan
-		onSignal := make(chan os.Signal)
+		onSignal := make(chan os.Signal, 1)
 		// 优雅退出
 		signal.Notify(onSignal, syscall.SIGINT, syscall.SIGTERM)
 		select {

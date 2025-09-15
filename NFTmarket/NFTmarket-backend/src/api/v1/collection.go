@@ -16,6 +16,7 @@ import (
 	"github.com/ProjectsTask/EasySwapBackend/src/types/v1"
 )
 
+// 指定Collection的items信息
 func CollectionItemsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterParam := c.Query("filters")
@@ -51,6 +52,7 @@ func CollectionItemsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// // 指定Collection的bids信息
 func CollectionBidsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterParam := c.Query("filters")
@@ -87,6 +89,7 @@ func CollectionBidsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 指定Item的bid信息
 func CollectionItemBidsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterParam := c.Query("filters")
@@ -129,6 +132,7 @@ func CollectionItemBidsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 获取NFT Item的详细信息
 func ItemDetailHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		collectionAddr := c.Params.ByName("address")
@@ -165,6 +169,7 @@ func ItemDetailHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 获取NFT Item的Trait的最高价格信息
 func ItemTopTraitPriceHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		collectionAddr := c.Params.ByName("address")
@@ -201,6 +206,7 @@ func ItemTopTraitPriceHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// NFT销售历史价格信息
 func HistorySalesHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		collectionAddr := c.Params.ByName("address")
@@ -251,6 +257,7 @@ func HistorySalesHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 获取NFT Item的Attribute信息
 func ItemTraitsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		collectionAddr := c.Params.ByName("address")
@@ -287,6 +294,7 @@ func ItemTraitsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 获取NFT Item的owner信息
 func ItemOwnerHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		collectionAddr := c.Params.ByName("address")
@@ -327,6 +335,7 @@ func ItemOwnerHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 获取NFT Item的图片信息
 func GetItemImageHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		collectionAddr := c.Params.ByName("address")
@@ -365,6 +374,7 @@ func GetItemImageHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 刷新NFT Item的metadata
 func ItemMetadataRefreshHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		chainId, err := strconv.ParseInt(c.Query("chain_id"), 10, 32)
@@ -402,6 +412,7 @@ func ItemMetadataRefreshHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 指定Collection详情
 func CollectionDetailHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		chainID, err := strconv.ParseInt(c.Query("chain_id"), 10, 32)

@@ -30,6 +30,7 @@ func getUserLoginTokenCacheKey(address string) string {
 	return middleware.CR_LOGIN_KEY + ":" + strings.ToLower(address)
 }
 
+// 登陆（获取用户信息）
 func UserLogin(ctx context.Context, svcCtx *svc.ServerCtx, req types.LoginReq) (*types.UserLoginInfo, error) {
 	// 返回结果
 	res := types.UserLoginInfo{}
@@ -138,6 +139,7 @@ func genLoginTemplate(nonce string) string {
 	return fmt.Sprintf("Welcome to EasySwap!\nNonce:%s", nonce)
 }
 
+// 登录（获取登录签名）
 func GetUserLoginMsg(ctx context.Context, svcCtx *svc.ServerCtx, address string) (*types.UserLoginMsgResp, error) {
 	uuid := uuid.NewString()
 	loginMsg := genLoginTemplate(uuid)
@@ -148,6 +150,7 @@ func GetUserLoginMsg(ctx context.Context, svcCtx *svc.ServerCtx, address string)
 	return &types.UserLoginMsgResp{Address: address, Message: loginMsg}, nil
 }
 
+// 获取用户签名状态
 func GetSigStatusMsg(ctx context.Context, svcCtx *svc.ServerCtx, userAddr string) (*types.UserSignStatusResp, error) {
 	isSigned, err := svcCtx.Dao.GetUserSigStatus(ctx, userAddr)
 	if err != nil {

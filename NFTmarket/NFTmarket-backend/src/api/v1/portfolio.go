@@ -12,6 +12,7 @@ import (
 	"github.com/ProjectsTask/EasySwapBackend/src/types/v1"
 )
 
+// 获取用户拥有Collection信息
 func UserMultiChainCollectionsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterParam := c.Query("filters")
@@ -44,6 +45,7 @@ func UserMultiChainCollectionsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 查询用户拥有nft的Item基本信息
 func UserMultiChainItemsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterParam := c.Query("filters")
@@ -86,6 +88,7 @@ func UserMultiChainItemsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 查询用户挂单的Listing信息
 func UserMultiChainListingsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterParam := c.Query("filters")
@@ -128,6 +131,7 @@ func UserMultiChainListingsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	}
 }
 
+// 查询用户挂单的Bids信息
 func UserMultiChainBidsHandler(svcCtx *svc.ServerCtx) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterParam := c.Query("filters")

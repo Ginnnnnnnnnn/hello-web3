@@ -9,6 +9,7 @@ import (
 	"github.com/ProjectsTask/EasySwapBackend/src/types/v1"
 )
 
+// 指定Item的bid信息
 func GetItemBidsInfo(ctx context.Context, svcCtx *svc.ServerCtx, chain string, collectionAddr, tokenID string, page, pageSize int) (*types.CollectionBidsResp, error) {
 	bids, count, err := svcCtx.Dao.QueryItemBids(ctx, chain, collectionAddr, tokenID, page, pageSize)
 	if err != nil {
