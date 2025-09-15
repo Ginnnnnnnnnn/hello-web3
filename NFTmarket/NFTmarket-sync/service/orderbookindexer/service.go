@@ -98,11 +98,15 @@ func New(ctx context.Context, cfg *config.Config, db *gorm.DB, xkv *xkv.Store, c
 }
 
 func (s *Service) Start() {
+	// 同步订单薄事件
 	threading.GoSafe(s.SyncOrderBookEventLoop)
+	// 处理地板价
 	threading.GoSafe(s.UpKeepingCollectionFloorChangeLoop)
 }
 
+// 同步订单薄事件
 func (s *Service) SyncOrderBookEventLoop() {
+	// 查询数据库记录最后区块
 	var indexedStatus base.IndexedStatus
 	if err := s.db.WithContext(s.ctx).Table(base.IndexedStatusTableName()).
 		Where("chain_id = ? and index_type = ?", s.chainId, EventIndexType).
@@ -111,61 +115,64 @@ func (s *Service) SyncOrderBookEventLoop() {
 			zap.Error(err))
 		return
 	}
-
 	lastSyncBlock := uint64(indexedStatus.LastIndexedBlock)
+	// 监听链
 	for {
+		// 监听停止通道
 		select {
 		case <-s.ctx.Done():
 			xzap.WithContext(s.ctx).Info("SyncOrderBookEventLoop stopped due to context cancellation")
 			return
 		default:
 		}
-
-		currentBlockNum, err := s.chainClient.BlockNumber() // 以轮询的方式获取当前区块高度
+		// 获取当前区块高度
+		currentBlockNum, err := s.chainClient.BlockNumber()
 		if err != nil {
 			xzap.WithContext(s.ctx).Error("failed on get current block number", zap.Error(err))
 			time.Sleep(SleepInterval * time.Second)
 			continue
 		}
-
-		if lastSyncBlock > currentBlockNum-MultiChainMaxBlockDifference[s.chain] { // 如果上次同步的区块高度大于当前区块高度，等待一段时间后再次轮询
+		// 如果上次同步的区块高度大于当前区块高度，等待一段时间后再次轮询
+		if lastSyncBlock > currentBlockNum-MultiChainMaxBlockDifference[s.chain] {
 			time.Sleep(SleepInterval * time.Second)
 			continue
 		}
-
+		// 如果结束区块高度大于当前区块高度，将结束区块高度设置为当前区块高度
 		startBlock := lastSyncBlock
 		endBlock := startBlock + SyncBlockPeriod
-		if endBlock > currentBlockNum-MultiChainMaxBlockDifference[s.chain] { // 如果结束区块高度大于当前区块高度，将结束区块高度设置为当前区块高度
+		if endBlock > currentBlockNum-MultiChainMaxBlockDifference[s.chain] {
 			endBlock = currentBlockNum - MultiChainMaxBlockDifference[s.chain]
 		}
-
+		// 查询区块事件
 		query := types.FilterQuery{
 			FromBlock: new(big.Int).SetUint64(startBlock),
 			ToBlock:   new(big.Int).SetUint64(endBlock),
 			Addresses: []string{s.cfg.ContractCfg.DexAddress},
 		}
-
-		logs, err := s.chainClient.FilterLogs(s.ctx, query) //同时获取多个（SyncBlockPeriod）区块的日志
+		logs, err := s.chainClient.FilterLogs(s.ctx, query)
 		if err != nil {
 			xzap.WithContext(s.ctx).Error("failed on get log", zap.Error(err))
 			time.Sleep(SleepInterval * time.Second)
 			continue
 		}
-
-		for _, log := range logs { // 遍历日志，根据不同的topic处理不同的事件
+		// 遍历日志，根据不同的topic处理不同的事件
+		for _, log := range logs {
 			ethLog := log.(ethereumTypes.Log)
 			switch ethLog.Topics[0].String() {
 			case LogMakeTopic:
+				// LogMake-创建订单
 				s.handleMakeEvent(ethLog)
 			case LogCancelTopic:
+				// LogCancel-取消订单
 				s.handleCancelEvent(ethLog)
 			case LogMatchTopic:
+				// LogMatch-匹配订单
 				s.handleMatchEvent(ethLog)
 			default:
 			}
 		}
-
-		lastSyncBlock = endBlock + 1 // 更新最后同步的区块高度
+		// 更新最后同步的区块高度
+		lastSyncBlock = endBlock + 1
 		if err := s.db.WithContext(s.ctx).Table(base.IndexedStatusTableName()).
 			Where("chain_id = ? and index_type = ?", s.chainId, EventIndexType).
 			Update("last_indexed_block", lastSyncBlock).Error; err != nil {
@@ -173,14 +180,14 @@ func (s *Service) SyncOrderBookEventLoop() {
 				zap.Error(err))
 			return
 		}
-
+		// 记录日志
 		xzap.WithContext(s.ctx).Info("sync orderbook event ...",
 			zap.Uint64("start_block", startBlock),
 			zap.Uint64("end_block", endBlock))
 	}
 }
 
-// 处理挂单事件
+// 处理创建订单事件
 func (s *Service) handleMakeEvent(log ethereumTypes.Log) {
 	var event struct {
 		OrderKey [32]byte
@@ -193,28 +200,32 @@ func (s *Service) handleMakeEvent(log ethereumTypes.Log) {
 		Expiry uint64
 		Salt   uint64
 	}
-
-	// Unpack data
-	err := s.parsedAbi.UnpackIntoInterface(&event, "LogMake", log.Data) // 通过ABI解析日志数据
+	// 通过ABI解析数据
+	err := s.parsedAbi.UnpackIntoInterface(&event, "LogMake", log.Data)
 	if err != nil {
 		xzap.WithContext(s.ctx).Error("Error unpacking LogMake event:", zap.Error(err))
 		return
 	}
-	// Extract indexed fields from topics
+	// 解析指定数据
 	side := uint8(new(big.Int).SetBytes(log.Topics[1].Bytes()).Uint64())
 	saleKind := uint8(new(big.Int).SetBytes(log.Topics[2].Bytes()).Uint64())
 	maker := common.BytesToAddress(log.Topics[3].Bytes())
-
+	// 设置订单类型
 	var orderType int64
-	if side == Bid { // 买单
-		if saleKind == FixForCollection { // 针对集合的买单
+	if side == Bid {
+		// 买单
+		if saleKind == FixForCollection {
+			// 针对集合的买单
 			orderType = multi.CollectionBidOrder
-		} else { // 针对某个具体NFT的买单
+		} else {
+			// 针对某个具体NFT的买单
 			orderType = multi.ItemBidOrder
 		}
-	} else { // 卖单
+	} else {
+		// 卖单
 		orderType = multi.ListingOrder
 	}
+	// 将订单信息存入数据库
 	newOrder := multi.Order{
 		CollectionAddress: event.Nft.CollectionAddr.String(),
 		MarketplaceId:     multi.MarketOrderBook,
@@ -234,26 +245,33 @@ func (s *Service) handleMakeEvent(log ethereumTypes.Log) {
 	}
 	if err := s.db.WithContext(s.ctx).Table(multi.OrderTableName(s.chain)).Clauses(clause.OnConflict{
 		DoNothing: true,
-	}).Create(&newOrder).Error; err != nil { // 将订单信息存入数据库
+	}).Create(&newOrder).Error; err != nil {
 		xzap.WithContext(s.ctx).Error("failed on create order",
 			zap.Error(err))
 	}
+	// 获取指定区块事件
 	blockTime, err := s.chainClient.BlockTimeByNumber(s.ctx, big.NewInt(int64(log.BlockNumber)))
 	if err != nil {
 		xzap.WithContext(s.ctx).Error("failed to get block time", zap.Error(err))
 		return
 	}
+	// 设置行为类型
 	var activityType int
 	if side == Bid {
+		// 买单
 		if saleKind == FixForCollection {
+			// 针对集合的买单
 			activityType = multi.CollectionBid
 		} else {
+			// 针对某个具体NFT的买单
 			activityType = multi.ItemBid
 		}
 	} else {
+		// 卖单
 		activityType = multi.Listing
 	}
-	newActivity := multi.Activity{ // 将订单信息存入活动表
+	// 将订单信息存入活动表
+	newActivity := multi.Activity{
 		ActivityType:      activityType,
 		Maker:             maker.String(),
 		Taker:             ZeroAddress,
@@ -272,8 +290,8 @@ func (s *Service) handleMakeEvent(log ethereumTypes.Log) {
 		xzap.WithContext(s.ctx).Warn("failed on create activity",
 			zap.Error(err))
 	}
-
-	if err := s.orderManager.AddToOrderManagerQueue(&multi.Order{ // 将订单信息存入订单管理队列
+	// 将订单信息存入订单管理队列
+	if err := s.orderManager.AddToOrderManagerQueue(&multi.Order{
 		ExpireTime:        newOrder.ExpireTime,
 		OrderID:           newOrder.OrderID,
 		CollectionAddress: newOrder.CollectionAddress,
@@ -287,21 +305,23 @@ func (s *Service) handleMakeEvent(log ethereumTypes.Log) {
 	}
 }
 
+// 处理匹配订单事件
 func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
+	// 解析时间数据
 	var event struct {
 		MakeOrder Order
 		TakeOrder Order
 		FillPrice *big.Int
 	}
-
 	err := s.parsedAbi.UnpackIntoInterface(&event, "LogMatch", log.Data)
 	if err != nil {
 		xzap.WithContext(s.ctx).Error("Error unpacking LogMatch event:", zap.Error(err))
 		return
 	}
-
-	makeOrderId := HexPrefix + hex.EncodeToString(log.Topics[1].Bytes()) // 通过topic获取订单ID
+	// 解析指定参数
+	makeOrderId := HexPrefix + hex.EncodeToString(log.Topics[1].Bytes())
 	takeOrderId := HexPrefix + hex.EncodeToString(log.Topics[2].Bytes())
+	// 收集参数
 	var owner string
 	var collection string
 	var tokenId string
@@ -309,14 +329,14 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 	var to string
 	var sellOrderId string
 	var buyOrder multi.Order
-	if event.MakeOrder.Side == Bid { // 买单， 由卖方发起交易撮合
+	if event.MakeOrder.Side == Bid {
+		// 买单， 由卖方发起交易撮合
 		owner = strings.ToLower(event.MakeOrder.Maker.String())
 		collection = event.TakeOrder.Nft.CollectionAddr.String()
 		tokenId = event.TakeOrder.Nft.TokenId.String()
 		from = event.TakeOrder.Maker.String()
 		to = event.MakeOrder.Maker.String()
 		sellOrderId = takeOrderId
-
 		// 更新卖方订单状态
 		if err := s.db.WithContext(s.ctx).Table(multi.OrderTableName(s.chain)).
 			Where("order_id = ?", takeOrderId).
@@ -329,7 +349,6 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 				zap.String("order_id", takeOrderId))
 			return
 		}
-
 		// 查询买方订单信息，不存在则无需更新，说明不是从平台前端发起的交易
 		if err := s.db.WithContext(s.ctx).Table(multi.OrderTableName(s.chain)).
 			Where("order_id = ?", makeOrderId).
@@ -359,14 +378,15 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 				return
 			}
 		}
-	} else { // 卖单， 由买方发起交易撮合， 同理
+	} else {
+		// 卖单， 由买方发起交易撮合， 同理
 		owner = strings.ToLower(event.TakeOrder.Maker.String())
 		collection = event.MakeOrder.Nft.CollectionAddr.String()
 		tokenId = event.MakeOrder.Nft.TokenId.String()
 		from = event.MakeOrder.Maker.String()
 		to = event.TakeOrder.Maker.String()
 		sellOrderId = makeOrderId
-
+		// 更新卖方订单状态
 		if err := s.db.WithContext(s.ctx).Table(multi.OrderTableName(s.chain)).
 			Where("order_id = ?", makeOrderId).
 			Updates(map[string]interface{}{
@@ -378,7 +398,7 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 				zap.String("order_id", makeOrderId))
 			return
 		}
-
+		// 查询买方订单信息
 		if err := s.db.WithContext(s.ctx).Table(multi.OrderTableName(s.chain)).
 			Where("order_id = ?", takeOrderId).
 			First(&buyOrder).Error; err != nil {
@@ -386,6 +406,7 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 				zap.Error(err))
 			return
 		}
+		// 更新买方订单的剩余数量
 		if buyOrder.QuantityRemaining > 1 {
 			if err := s.db.WithContext(s.ctx).Table(multi.OrderTableName(s.chain)).
 				Where("order_id = ?", takeOrderId).
@@ -407,12 +428,13 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 			}
 		}
 	}
-
+	// 获取指定区块时间
 	blockTime, err := s.chainClient.BlockTimeByNumber(s.ctx, big.NewInt(int64(log.BlockNumber)))
 	if err != nil {
 		xzap.WithContext(s.ctx).Error("failed to get block time", zap.Error(err))
 		return
 	}
+	// 保存行为信息-mysql
 	newActivity := multi.Activity{
 		ActivityType:      multi.Sale,
 		Maker:             event.MakeOrder.Maker.String(),
@@ -432,7 +454,6 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 		xzap.WithContext(s.ctx).Warn("failed on create activity",
 			zap.Error(err))
 	}
-
 	// 更新NFT的所有者
 	if err := s.db.WithContext(s.ctx).Table(multi.ItemTableName(s.chain)).
 		Where("collection_address = ? and token_id = ?", strings.ToLower(collection), tokenId).
@@ -441,8 +462,8 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 			zap.Error(err))
 		return
 	}
-
-	if err := ordermanager.AddUpdatePriceEvent(s.kv, &ordermanager.TradeEvent{ // 将交易信息存入价格更新队列
+	// 保存行为信息-redis
+	if err := ordermanager.AddUpdatePriceEvent(s.kv, &ordermanager.TradeEvent{
 		OrderId:        sellOrderId,
 		CollectionAddr: collection,
 		EventType:      ordermanager.Buy,
@@ -457,9 +478,10 @@ func (s *Service) handleMatchEvent(log ethereumTypes.Log) {
 	}
 }
 
+// 处理取消订单事件
 func (s *Service) handleCancelEvent(log ethereumTypes.Log) {
+	// 更新订单为取消状态
 	orderId := HexPrefix + hex.EncodeToString(log.Topics[1].Bytes())
-	//maker := common.BytesToAddress(log.Topics[2].Bytes())
 	if err := s.db.WithContext(s.ctx).Table(multi.OrderTableName(s.chain)).
 		Where("order_id = ?", orderId).
 		Update("order_status", multi.OrderStatusCancelled).Error; err != nil {
@@ -467,7 +489,7 @@ func (s *Service) handleCancelEvent(log ethereumTypes.Log) {
 			zap.String("order_id", orderId))
 		return
 	}
-
+	// 查询订单信息
 	var cancelOrder multi.Order
 	if err := s.db.WithContext(s.ctx).Table(multi.OrderTableName(s.chain)).
 		Where("order_id = ?", orderId).
@@ -476,20 +498,23 @@ func (s *Service) handleCancelEvent(log ethereumTypes.Log) {
 			zap.Error(err))
 		return
 	}
-
+	// 获取指定区块时间
 	blockTime, err := s.chainClient.BlockTimeByNumber(s.ctx, big.NewInt(int64(log.BlockNumber)))
 	if err != nil {
 		xzap.WithContext(s.ctx).Error("failed to get block time", zap.Error(err))
 		return
 	}
+	// 设置行为类型
 	var activityType int
-	if cancelOrder.OrderType == multi.ListingOrder {
+	switch cancelOrder.OrderType {
+	case multi.ListingOrder:
 		activityType = multi.CancelListing
-	} else if cancelOrder.OrderType == multi.CollectionBidOrder {
+	case multi.CollectionBidOrder:
 		activityType = multi.CancelCollectionBid
-	} else {
+	default:
 		activityType = multi.CancelItemBid
 	}
+	// 保存行为记录-mysql
 	newActivity := multi.Activity{
 		ActivityType:      activityType,
 		Maker:             cancelOrder.Maker,
@@ -509,7 +534,7 @@ func (s *Service) handleCancelEvent(log ethereumTypes.Log) {
 		xzap.WithContext(s.ctx).Warn("failed on create activity",
 			zap.Error(err))
 	}
-
+	// 保存行为记录-redis
 	if err := ordermanager.AddUpdatePriceEvent(s.kv, &ordermanager.TradeEvent{
 		OrderId:        cancelOrder.OrderID,
 		CollectionAddr: cancelOrder.CollectionAddress,
@@ -523,12 +548,13 @@ func (s *Service) handleCancelEvent(log ethereumTypes.Log) {
 	}
 }
 
+// 处理地板价
 func (s *Service) UpKeepingCollectionFloorChangeLoop() {
 	timer := time.NewTicker(comm.DaySeconds * time.Second)
 	defer timer.Stop()
 	updateFloorPriceTimer := time.NewTicker(comm.MaxCollectionFloorTimeDifference * time.Second)
 	defer updateFloorPriceTimer.Stop()
-
+	// 查询数据库记录最后区块
 	var indexedStatus base.IndexedStatus
 	if err := s.db.WithContext(s.ctx).Table(base.IndexedStatusTableName()).
 		Select("last_indexed_time").
@@ -538,37 +564,41 @@ func (s *Service) UpKeepingCollectionFloorChangeLoop() {
 			zap.Error(err))
 		return
 	}
-
+	// 处理业务
 	for {
 		select {
 		case <-s.ctx.Done():
+			// 停止
 			xzap.WithContext(s.ctx).Info("UpKeepingCollectionFloorChangeLoop stopped due to context cancellation")
 			return
 		case <-timer.C:
+			// 删除过期地板价
 			if err := s.deleteExpireCollectionFloorChangeFromDatabase(); err != nil {
 				xzap.WithContext(s.ctx).Error("failed on delete expire collection floor change",
 					zap.Error(err))
 			}
 		case <-updateFloorPriceTimer.C:
+			// 更新地板价
 			if s.cfg.ProjectCfg.Name == gdb.OrderBookDexProject {
+				// 查询地板价
 				floorPrices, err := s.QueryCollectionsFloorPrice()
 				if err != nil {
 					xzap.WithContext(s.ctx).Error("failed on query collections floor change",
 						zap.Error(err))
 					continue
 				}
-
+				// 更新地板价
 				if err := s.persistCollectionsFloorChange(floorPrices); err != nil {
 					xzap.WithContext(s.ctx).Error("failed on persist collections floor price",
 						zap.Error(err))
 					continue
 				}
 			}
-		default:
 		}
 	}
 }
 
+// 删除过期地板价格
 func (s *Service) deleteExpireCollectionFloorChangeFromDatabase() error {
 	stmt := fmt.Sprintf(`DELETE FROM %s where event_time < UNIX_TIMESTAMP() - %d`, gdb.GetMultiProjectCollectionFloorPriceTableName(s.cfg.ProjectCfg.Name, s.chain), comm.CollectionFloorTimeRange)
 
@@ -579,6 +609,7 @@ func (s *Service) deleteExpireCollectionFloorChangeFromDatabase() error {
 	return nil
 }
 
+// 查询地板价
 func (s *Service) QueryCollectionsFloorPrice() ([]multi.CollectionFloorPrice, error) {
 	timestamp := time.Now().Unix()
 	timestampMilli := time.Now().UnixMilli()
@@ -606,6 +637,7 @@ WHERE (co.order_type = ? and
 	return collectionFloorPrice, nil
 }
 
+// 更新地板价
 func (s *Service) persistCollectionsFloorChange(FloorPrices []multi.CollectionFloorPrice) error {
 	for i := 0; i < len(FloorPrices); i += comm.DBBatchSizeLimit {
 		end := i + comm.DBBatchSizeLimit

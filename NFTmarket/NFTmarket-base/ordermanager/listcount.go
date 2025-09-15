@@ -34,20 +34,16 @@ func (om *OrderManager) listCountProcess() {
 		xzap.WithContext(om.Ctx).Error("failed on count collection listed",
 			zap.Error(err))
 	}
-
 	// 将统计结果缓存到Redis
 	if err := om.cacheCollectionListCount(collectionsListed); err != nil {
 		xzap.WithContext(om.Ctx).Error("failed on cache collection listed count",
 			zap.Error(err))
 	}
-
 	// 用于记录需要更新的集合地址
 	collections := make(map[string]bool)
-
 	// 创建定时器,每分钟执行一次更新
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
-
 	// 持续监听和处理
 	for {
 		select {
@@ -75,7 +71,8 @@ func (om *OrderManager) listCountProcess() {
 				collections = make(map[string]bool)
 			}
 		case addr := <-om.collectionListedCh: // 接收到集合状态变更通知
-			collections[strings.ToLower(addr)] = true // 记录需要更新的集合地址
+			// 记录需要更新的集合地址
+			collections[strings.ToLower(addr)] = true
 		case <-om.Ctx.Done(): // 上下文取消时退出
 			xzap.WithContext(om.Ctx).Info("collection list count process exit",
 				zap.Error(err))

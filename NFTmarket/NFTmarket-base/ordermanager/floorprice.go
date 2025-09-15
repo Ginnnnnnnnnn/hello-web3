@@ -55,6 +55,7 @@ type TradeEvent struct {
 	TxHash         string          `json:"txHash"`
 }
 
+// 处理floorprice更新
 func (om *OrderManager) floorPriceProcess() {
 	// 清空缓存中的剩余事件
 	key := genTradeEventsCacheKey(om.chain)
@@ -242,16 +243,13 @@ func (om *OrderManager) loadCollectionTradeInfo() error {
 		Select("id, address, floor_price").Where("1=1").Scan(&collections).Error; err != nil {
 		return errors.Wrap(err, "failed on get collection floor price")
 	}
-	var collectionAddrs []string
 	for _, collection := range collections {
-		collectionAddrs = append(collectionAddrs, collection.Address)
 		// 为每个集合初始化交易信息,包含地板价和订单优先队列
 		om.collectionOrders[strings.ToLower(collection.Address)] = &collectionTradeInfo{
 			floorPrice: collection.FloorPrice,
 			orders:     NewPriorityQueueMap(maxQueueLength), // 优先级队列,限制最大长度
 		}
 	}
-
 	// 2. 分批加载每个集合的前100个有效订单
 	var totalOrders []*multi.Order
 	var id int64

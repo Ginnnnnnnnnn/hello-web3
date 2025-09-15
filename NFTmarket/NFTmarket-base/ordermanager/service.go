@@ -84,11 +84,14 @@ func New(ctx context.Context, db *gorm.DB, xkv *xkv.Store, chain string, project
 }
 
 func (om *OrderManager) Start() {
-	// listen redis cache
-	threading.GoSafe(om.ListenNewListingLoop) // 处理新订单
-	threading.GoSafe(om.orderExpiryProcess)   // 处理订单过期状态
-	threading.GoSafe(om.floorPriceProcess)    // 处理floorprice更新
-	threading.GoSafe(om.listCountProcess)     // 处理listCount更新
+	// 处理新订单
+	threading.GoSafe(om.ListenNewListingLoop)
+	// 处理订单过期状态
+	threading.GoSafe(om.orderExpiryProcess)
+	// 处理floorprice更新
+	threading.GoSafe(om.floorPriceProcess)
+	// 处理listCount更新
+	threading.GoSafe(om.listCountProcess)
 }
 
 func (om *OrderManager) Stop() {
@@ -103,9 +106,11 @@ type ListingInfo struct {
 	Maker          string          `json:"maker"`
 }
 
+// 处理新订单
 func (om *OrderManager) ListenNewListingLoop() {
 	key := GenOrdersCacheKey(om.chain)
 	for {
+		// 获取订单
 		result, err := om.Xkv.Lpop(key)
 		if err != nil || result == "" {
 			if err != nil && err != redis.Nil {
@@ -114,26 +119,25 @@ func (om *OrderManager) ListenNewListingLoop() {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-
 		xzap.WithContext(om.Ctx).Info("get listing from cache", zap.String("result", result))
+		// 序列化订单信息
 		var listing ListingInfo
 		if err := json.Unmarshal([]byte(result), &listing); err != nil {
 			xzap.WithContext(om.Ctx).Warn("failed on Unmarshal order info", zap.Error(err))
 			continue
 		}
+		// 校验订单
 		if listing.OrderId == "" {
 			xzap.WithContext(om.Ctx).Error("invalid null order id")
 			continue
 		}
-
-		if listing.ExpireIn < time.Now().Unix() { // 订单已经过期
+		if listing.ExpireIn < time.Now().Unix() {
+			// 订单已经过期
 			xzap.WithContext(om.Ctx).Info("expired activity order", zap.String("order_id", listing.OrderId))
-
 			// 更新订单状态
 			if err := om.updateOrdersStatus(listing.OrderId, multi.OrderStatusExpired); err != nil {
 				xzap.WithContext(om.Ctx).Error("failed on update activity status", zap.String("order_id", listing.OrderId), zap.Error(err))
 			}
-
 			// 添加更新floorprice事件
 			if err := om.addUpdateFloorPriceEvent(&TradeEvent{
 				EventType:      Expired,
@@ -145,8 +149,9 @@ func (om *OrderManager) ListenNewListingLoop() {
 				xzap.WithContext(om.Ctx).Error("failed on add update floor price event", zap.String("order_id", listing.OrderId), zap.Error(err))
 			}
 			continue
-		} else { // 订单未过期
-			if err := om.addUpdateFloorPriceEvent(&TradeEvent{ // 添加更新floorprice事件
+		} else {
+			// 订单未过期，添加更新floorprice事件
+			if err := om.addUpdateFloorPriceEvent(&TradeEvent{
 				EventType:      Listing,
 				CollectionAddr: listing.CollectionAddr,
 				TokenID:        listing.TokenID,
@@ -159,7 +164,6 @@ func (om *OrderManager) ListenNewListingLoop() {
 					zap.String("price", listing.Price.String()),
 					zap.String("chain", om.chain))
 			}
-
 			// 添加到订单过期检查队列
 			delaySeconds := listing.ExpireIn - time.Now().Unix()
 			if err := om.addToOrderExpiryCheckQueue(delaySeconds, om.chain, listing.OrderId, listing.CollectionAddr); err != nil {
@@ -170,6 +174,7 @@ func (om *OrderManager) ListenNewListingLoop() {
 	}
 }
 
+// 添加订单
 func (om *OrderManager) AddToOrderManagerQueue(order *multi.Order) error {
 	if order.TokenId == "" {
 		return errors.New("order manger need token id")

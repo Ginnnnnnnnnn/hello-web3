@@ -33,48 +33,47 @@ func (om *OrderManager) orderExpiryProcess() {
 
 	// 3. 每秒检查一次时间轮
 	for {
-		select {
-		case <-time.After(time.Second * 1): // 每秒执行一次检查
-			// 如果当前索引超过时间轮大小,则取模重置
-			if om.CurrentIndex >= WheelSize {
-				om.CurrentIndex = om.CurrentIndex % WheelSize
-			}
+		<-time.After(time.Second * 1)
 
-			// 获取当前时间槽的任务链表头
-			taskLinkHead := om.TimeWheel[om.CurrentIndex].NotifyActivities
-			headIndex := om.CurrentIndex
-			om.CurrentIndex++
+		// 如果当前索引超过时间轮大小,则取模重置
+		if om.CurrentIndex >= WheelSize {
+			om.CurrentIndex = om.CurrentIndex % WheelSize
+		}
 
-			// prev指向前一个节点,p指向当前节点
-			prev := taskLinkHead
-			p := taskLinkHead
+		// 获取当前时间槽的任务链表头
+		taskLinkHead := om.TimeWheel[om.CurrentIndex].NotifyActivities
+		headIndex := om.CurrentIndex
+		om.CurrentIndex++
 
-			// 遍历当前时间槽的所有任务
-			for p != nil {
-				// 如果任务的循环计数为0,说明到期需要处理
-				if p.CycleCount == 0 {
-					// 异步更新订单状态,避免阻塞主循环
-					go func(chain string, orderId string, collectionAddr string) {
-						if err := om.updateOrderState(orderId, collectionAddr); err != nil {
-							xzap.WithContext(om.Ctx).Error("failed on update order status", zap.Error(err), zap.String("chain", chain), zap.String("order_id", orderId))
-						}
-					}(p.ChainSuffix, p.orderID, p.CollectionAddr)
+		// prev指向前一个节点,p指向当前节点
+		prev := taskLinkHead
+		p := taskLinkHead
 
-					// 从链表中删除该节点
-					if prev == p { // 如果是头节点
-						om.TimeWheel[headIndex].NotifyActivities = p.Next
-						prev = p.Next
-						p = p.Next
-					} else { // 如果不是头节点
-						prev.Next = p.Next
-						p = p.Next
+		// 遍历当前时间槽的所有任务
+		for p != nil {
+			// 如果任务的循环计数为0,说明到期需要处理
+			if p.CycleCount == 0 {
+				// 异步更新订单状态,避免阻塞主循环
+				go func(chain string, orderId string, collectionAddr string) {
+					if err := om.updateOrderState(orderId, collectionAddr); err != nil {
+						xzap.WithContext(om.Ctx).Error("failed on update order status", zap.Error(err), zap.String("chain", chain), zap.String("order_id", orderId))
 					}
-				} else {
-					// 如果任务未到期,循环计数减1
-					p.CycleCount--
-					prev = p
+				}(p.ChainSuffix, p.orderID, p.CollectionAddr)
+
+				// 从链表中删除该节点
+				if prev == p { // 如果是头节点
+					om.TimeWheel[headIndex].NotifyActivities = p.Next
+					prev = p.Next
+					p = p.Next
+				} else { // 如果不是头节点
+					prev.Next = p.Next
 					p = p.Next
 				}
+			} else {
+				// 如果任务未到期,循环计数减1
+				p.CycleCount--
+				prev = p
+				p = p.Next
 			}
 		}
 	}
@@ -107,7 +106,7 @@ func (om *OrderManager) loadOrdersToQueue() error {
 		id = orders[len(orders)-1].ID
 	}
 
-	if totalOrders == nil || len(totalOrders) == 0 {
+	if len(totalOrders) == 0 {
 		return nil
 	}
 
@@ -115,10 +114,12 @@ func (om *OrderManager) loadOrdersToQueue() error {
 	var expiredOrderIDs []int64
 	var expiredOrders []*multi.Order
 	for _, order := range totalOrders {
-		if order.ExpireTime < time.Now().Unix() { // 已过期
+		if order.ExpireTime < time.Now().Unix() {
+			// 已过期
 			expiredOrderIDs = append(expiredOrderIDs, order.ID)
 			expiredOrders = append(expiredOrders, order)
-		} else { // 未过期,添加到延迟队列
+		} else {
+			// 未过期,添加到延迟队列
 			delaySeconds := order.ExpireTime - time.Now().Unix()
 			if err := om.addToOrderExpiryCheckQueue(delaySeconds, om.chain, order.OrderID, order.CollectionAddress); err != nil {
 				xzap.WithContext(om.Ctx).Error("[Order Manage] failed on add order to delay queue",
@@ -236,11 +237,11 @@ func (om *OrderManager) updateOrderState(orderId string, collectionAddr string) 
 	return nil
 }
 
+// 更新订单状态
 func (om *OrderManager) updateOrdersStatus(orderID string, orderStatus int) error {
-	if err := om.DB.WithContext(om.Ctx).Table(fmt.Sprintf("%s", gdb.GetMultiProjectOrderTableName(om.project, om.chain))).
+	if err := om.DB.WithContext(om.Ctx).Table(gdb.GetMultiProjectOrderTableName(om.project, om.chain)).
 		Where("order_id = ?", orderID).Update("order_status", orderStatus).Error; err != nil {
 		return errors.Wrap(err, "failed on update expired orders status")
 	}
-
 	return nil
 }
