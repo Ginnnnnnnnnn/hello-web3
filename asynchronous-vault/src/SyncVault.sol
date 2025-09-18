@@ -51,11 +51,6 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
  *                                888
  */
 
-/*
- * ########
- * # LIBS #
- * ########
- */
 using Math for uint256; // only used for `mulDiv` operations.
 using SafeERC20 for IERC20; // `safeTransfer` and `safeTransferFrom`
 
@@ -84,9 +79,9 @@ abstract contract SyncVault is
     uint16 internal _maxDrawdown;
     // 资产精度
     uint8 private _underlyingDecimals;
-    // 底层资产
+    // 资产代币
     IERC20 internal _asset;
-    // 金库是否开放
+    // 金库开放状态
     bool public vaultIsOpen;
     // 上次保存资产余额
     uint256 public lastSavedBalance;
@@ -169,7 +164,7 @@ abstract contract SyncVault is
         deposit(bootstrapAmount, owner);
     }
 
-    // =================== 合约暂停 ===================
+    // =================== 合约设置 ===================
 
     /**
      * @dev 暂停
@@ -184,8 +179,6 @@ abstract contract SyncVault is
     function unpause() external onlyOwner {
         _unpause();
     }
-
-    // =================== 合约设置 ===================
 
     /**
      * @dev 设置绩效费
@@ -209,34 +202,66 @@ abstract contract SyncVault is
         _maxDrawdown = newMaxDrawdown;
     }
 
+    /**
+     * @dev 获取资产代币地址
+     */
+    function asset() public view returns (address) {
+        return address(_asset);
+    }
+
     function open(uint256 assetReturned) external virtual;
     function close() external virtual;
 
     // =================== 功能方法 ===================
 
     /**
-     * @dev The `withdraw` function is used to withdraw the specified underlying
-     * assets amount in exchange of a proportional amount of shares.
-     * @param assets The underlying assets amount to be converted into shares.
-     * @param receiver The address of the shares receiver.
-     * @param owner The address of the owner.
-     * @return Amount of shares received in exchange of the specified underlying
-     * assets amount.
+     * @dev 撤回
+     * @notice 撤回指定数量资产，销毁对应数量份额
+     * @param assets 资产数量
+     * @param receiver 资产接收者
+     * @param owner owner 份额拥有者
+     * @return 销毁份额数量
      */
     function withdraw(
         uint256 assets,
         address receiver,
         address owner
     ) external whenNotPaused returns (uint256) {
+        // 校验 开放状态 和 最大撤回金额
         uint256 maxAssets = maxWithdraw(owner);
         if (assets > maxAssets) {
             revert ERC4626ExceededMaxWithdraw(owner, assets, maxAssets);
         }
-
+        // 计算份额
         uint256 sharesAmount = previewWithdraw(assets);
         _withdraw(_msgSender(), receiver, owner, assets, sharesAmount);
-
+        // 返回
         return sharesAmount;
+    }
+
+    /**
+     * @dev 兑换
+     * @notice 销毁指定数量份额，撤回对应数量资产
+     * @param shares 份额
+     * @param receiver 接收者
+     * @param owner 份额拥有者
+     * @return 兑换资产数量
+     */
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address owner
+    ) public whenNotPaused returns (uint256) {
+        // 校验 开放状态 和 最大兑换份额
+        uint256 maxShares = maxRedeem(owner);
+        if (shares > maxShares) {
+            revert ERC4626ExceededMaxRedeem(owner, shares, maxShares);
+        }
+        // 计算资产
+        uint256 assetsAmount = previewRedeem(shares);
+        _withdraw(_msgSender(), receiver, owner, assetsAmount, shares);
+        // 返回
+        return assetsAmount;
     }
 
     /**
@@ -263,7 +288,7 @@ abstract contract SyncVault is
 
     /**
      * @dev 存款
-     * @notice 存款指定数量代币换取份额
+     * @notice 存款指定数量份额，铸造对应数量份额
      * @param assets 资产数量
      * @param receiver 份额接收地址
      * @return 份额数量
@@ -272,7 +297,7 @@ abstract contract SyncVault is
         uint256 assets,
         address receiver
     ) public whenNotPaused returns (uint256) {
-        // 校验 开发状态 和 最大存款金额
+        // 校验 开放状态 和 最大存款金额
         uint256 maxAssets = maxDeposit(receiver);
         if (assets > maxAssets) {
             revert ERC4626ExceededMaxDeposit(receiver, assets, maxAssets);
@@ -287,7 +312,7 @@ abstract contract SyncVault is
 
     /**
      * @dev 铸造
-     * @notice 铸造指定份额数量的代币
+     * @notice 铸造指定数量份额，存款所需数量代币
      * @param shares 份额数量
      * @param receiver 份额接收地址
      * @return 资产数量
@@ -296,12 +321,12 @@ abstract contract SyncVault is
         uint256 shares,
         address receiver
     ) public whenNotPaused returns (uint256) {
-        // 校验 开发状态 和 最大存款金额
+        // 校验 开放状态 和 最大存款金额
         uint256 maxShares = maxMint(receiver);
         if (shares > maxShares) {
             revert ERC4626ExceededMaxMint(receiver, shares, maxShares);
         }
-        // 计算份额
+        // 计算资产
         uint256 assetsAmount = previewMint(shares);
         // 存款 和 铸造份额
         _deposit(_msgSender(), receiver, assetsAmount, shares);
@@ -310,46 +335,28 @@ abstract contract SyncVault is
     }
 
     /**
-     * @dev The `redeem` function is used to redeem the specified amount of
-     * shares in exchange of the corresponding underlying assets amount from
-     * owner.
-     * @param shares The shares amount to be converted into underlying assets.
-     * @param receiver The address of the shares receiver.
-     * @param owner The address of the owner.
-     * @return Amount of underlying assets received in exchange of the specified
-     * amount of shares.
+     * @dev 计算份额
+     * @param assets 资产
+     * @return 份额
      */
-    function redeem(
-        uint256 shares,
-        address receiver,
-        address owner
-    ) public whenNotPaused returns (uint256) {
-        uint256 maxShares = maxRedeem(owner);
-        if (shares > maxShares) {
-            revert ERC4626ExceededMaxRedeem(owner, shares, maxShares);
-        }
-
-        uint256 assetsAmount = previewRedeem(shares);
-        _withdraw(_msgSender(), receiver, owner, assetsAmount, shares);
-
-        return assetsAmount;
-    }
-
-    // @return address of the underlying asset.
-    function asset() public view returns (address) {
-        return address(_asset);
-    }
-
-    // @dev See {IERC4626-convertToShares}.
     function convertToShares(uint256 assets) public view returns (uint256) {
         return _convertToShares(assets, Math.Rounding.Floor);
     }
 
+    /**
+     * @dev 计算资产
+     * @param owner 份额拥有者
+     * @return 资产
+     */
     function sharesBalanceInAsset(address owner) public view returns (uint256) {
         return convertToAssets(balanceOf(owner));
     }
 
-    // @dev See {IERC4626-convertToAssets}.
+    /**
+     * @dev 计算资产
+     * @param shares 份额
+     * @return 资产
+     */
     function convertToAssets(uint256 shares) public view returns (uint256) {
         return _convertToAssets(shares, Math.Rounding.Floor);
     }
@@ -373,10 +380,9 @@ abstract contract SyncVault is
     }
 
     /**
-     * @dev See {IERC4626-maxWithdraw}.
-     * @notice If the function is called during the lock period the maxWithdraw
-     * is `0`.
-     * @return Amount of the maximum number of withdrawable underlying assets.
+     * @dev 最大撤回
+     * @notice 如果保险库被锁定或暂停，则为0。
+     * @return 最大可撤回资产
      */
     function maxWithdraw(address owner) public view returns (uint256) {
         return
@@ -386,11 +392,9 @@ abstract contract SyncVault is
     }
 
     /**
-     * @dev See {IERC4626-maxRedeem}.
-     * @notice If the function is called during the lock period the maxRedeem is
-     * `0`;
-     * @param owner The address of the owner.
-     * @return Amount of the maximum number of redeemable shares.
+     * @dev 最大兑换
+     * @notice 如果保险库被锁定或暂停，则为0。
+     * @return 最大可兑换份额
      */
     function maxRedeem(address owner) public view returns (uint256) {
         return vaultIsOpen && !paused() ? balanceOf(owner) : 0;
@@ -415,14 +419,18 @@ abstract contract SyncVault is
     }
 
     /**
-     * @dev See {IERC4626-previewWithdraw}
+     * @dev 计算份额-撤回
+     * @param assets 资产
+     * @return 份额
      */
     function previewWithdraw(uint256 assets) public view returns (uint256) {
         return _convertToShares(assets, Math.Rounding.Ceil);
     }
 
     /**
-     * @dev See {IERC4626-previewRedeem}
+     * @dev 计算资产-兑换
+     * @param shares 份额
+     * @return 资产
      */
     function previewRedeem(uint256 shares) public view returns (uint256) {
         return _convertToAssets(shares, Math.Rounding.Floor);
@@ -449,31 +457,21 @@ abstract contract SyncVault is
         uint256 assets,
         uint256 shares
     ) internal {
-        // If _asset is ERC777, transferFrom can trigger a reentrancy BEFORE the
-        // transfer happens through the tokensToSend hook. On the other hand,
-        // the tokenReceived hook, that is triggered after the transfer,calls
-        // the vault, which is assumed not malicious.
-        //
-        // Conclusion: we need to do the transfer before we mint so that any
-        // reentrancy would happen before the assets are transferred and before
-        // the shares are minted, which is a valid state.
-        // slither-disable-next-line reentrancy-no-eth
+        // 转账资产到合约
         _asset.safeTransferFrom(caller, address(this), assets);
+        // mint份额
         _mint(receiver, shares);
+        // 发送存款事件
         emit Deposit(caller, receiver, assets, shares);
     }
 
     /**
-     * @dev The function `_withdraw` is used to withdraw the specified
-     * underlying assets amount in exchange of a proportionnal amount of shares
-     * by
-     * specifying all the params.
-     * @notice The `withdraw` function is used to withdraw the specified
-     * underlying assets amount in exchange of a proportionnal amount of shares.
-     * @param receiver The address of the shares receiver.
-     * @param owner The address of the owner.
-     * @param assets The underlying assets amount to be converted into shares.
-     * @param shares The shares amount to be converted into underlying assets.
+     * @dev 赎回 和 销毁份额
+     * @param caller 发起者地址
+     * @param receiver 资产接收者
+     * @param owner 份额拥有者
+     * @param assets 资产
+     * @param shares 份额
      */
     function _withdraw(
         address caller,
@@ -482,14 +480,22 @@ abstract contract SyncVault is
         uint256 assets,
         uint256 shares
     ) internal {
+        // 代替别人赎回，检查授权
         if (caller != owner) _spendAllowance(owner, caller, shares);
-
+        // burn份额
         _burn(owner, shares);
+        // 转账资产到发送者
         _asset.safeTransfer(receiver, assets);
-
+        // 发送赎回事件
         emit Withdraw(caller, receiver, owner, assets, shares);
     }
 
+    /**
+     * @dev 更新股份信息
+     * @param from 拥有者
+     * @param to 接收者
+     * @param value 金额
+     */
     function _update(
         address from,
         address to,
