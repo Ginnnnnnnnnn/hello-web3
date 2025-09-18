@@ -68,14 +68,14 @@ struct EpochData {
  * @dev 结算信息
  */
 struct SettleValues {
-    uint256 lastSavedBalance;
+    uint256 lastSavedBalance; // 最后保存余额（包含费用）
     uint256 fees; // 费用
-    uint256 pendingRedeem;
-    uint256 sharesToMint;
-    uint256 pendingDeposit;
-    uint256 assetsToWithdraw;
-    uint256 totalAssetsSnapshot;
-    uint256 totalSupplySnapshot;
+    uint256 pendingRedeem; // 请求中股份
+    uint256 sharesToMint; // 请求中资产所需股份
+    uint256 pendingDeposit; // 请求中资产
+    uint256 assetsToWithdraw; // 请求总股份所需资产
+    uint256 totalAssetsSnapshot; // 总资产（不包含费用）（不包含请求中）
+    uint256 totalSupplySnapshot; // 总份额（不包含请求中）
 }
 
 /**
@@ -104,7 +104,7 @@ contract AsyncVault is IERC7540, SyncVault {
     mapping(uint256 epochId => EpochData epoch) public epochs;
     // 用户最后一次存款周期
     mapping(address user => uint256 epochId) public lastDepositRequestId;
-    // 用户最后一次兑换周期
+    // 用户最后一次赎回周期
     mapping(address user => uint256 epochId) public lastRedeemRequestId;
 
     // =================== 事件 ===================
@@ -297,11 +297,37 @@ contract AsyncVault is IERC7540, SyncVault {
         (uint256 newBalance, ) = _settle(assetReturned);
         // 设置金库状态
         vaultIsOpen = true;
-        // 转账资产到owner
+        // 转账资产到合约
         _asset.safeTransferFrom(owner(), address(this), newBalance);
     }
 
     // =================== 功能方法 ===================
+
+    /**
+     * @dev 请求存款-离线许可授权
+     * @notice 当金库关闭时，用户只能请求存款。这样，资金将被发送并等待在 pendingSilo 中。
+     * 当所有者调用 `open` 或 `settle` 函数时，资金将被存入，铸造的份额将被发送到 claimableSilo。
+     * 等待用户领取。
+     * @param assets 资产数量
+     * @param receiver 接收者地址
+     * @param data 要发送给接收者的数据
+     * @param permitParams 离线许可参数
+     */
+    function requestDepositWithPermit(
+        uint256 assets,
+        address receiver,
+        bytes memory data,
+        PermitParams calldata permitParams
+    ) public {
+        address _msgSender = _msgSender();
+        // 检查授权余额
+        if (_asset.allowance(_msgSender, address(this)) < assets) {
+            // 余额不够，执行授权
+            execPermit(_msgSender, address(this), permitParams);
+        }
+        // 请求存款
+        return requestDeposit(assets, receiver, _msgSender, data);
+    }
 
     /**
      * @dev 请求存款
@@ -399,7 +425,7 @@ contract AsyncVault is IERC7540, SyncVault {
         }
         // 转账股份
         _update(owner, address(pendingSilo), shares);
-        // 创建股份请求
+        // 创建赎回请求
         _createRedeemRequest(shares, receiver, owner, data);
     }
 
@@ -426,22 +452,16 @@ contract AsyncVault is IERC7540, SyncVault {
     }
 
     /**
-     * @dev The `settle` function is used to settle the vault.
-     * @notice The `settle` function is used to settle the vault. It can only be
-     * called by the owner of the contract (`onlyOwner` modifier).
-     * If there are profits, the performance fees are taken and sent to the
-     * owner of the contract.
-     * Since amphor strategies can be time sensitive, we must be able to switch
-     * epoch without needing to put all the funds back.
-     * Using _settle we can virtually put back the funds, check how much we owe
-     * to users that want to redeem and maybe take the extra funds from the
-     * deposit requests.
-     * @param newSavedBalance The underlying assets amount to be deposited into
-     * the vault.
+     * @dev 结算
+     * @notice 由合约所有者，如果有盈利，则收取绩效费并发送给合约所有者。
+     * 由于 amphor 策略可能具有时间敏感性，因此我们必须能够在切换 epoch 时无需将所有资金存回。
+     * 使用 _settle，我们可以虚拟地存回资金，检查我们欠想要赎回的用户的金额，并可能从存款请求中提取额外的资金。
+     * @param newSavedBalance 待存入金库的资产
      */
     function settle(
         uint256 newSavedBalance
     ) external onlyOwner whenNotPaused whenClosed {
+        // 结算
         (uint256 _lastSavedBalance, uint256 totalSupply) = _settle(
             newSavedBalance
         );
@@ -551,26 +571,6 @@ contract AsyncVault is IERC7540, SyncVault {
     }
 
     /**
-     * @dev This funciton let user request a deposit using permit signatures.
-     * @param assets The amount of assets requested by the user.
-     * @param receiver The address of the user that requested the deposit.
-     * @param data The data to be sent to the receiver.
-     * @param permitParams The permit signature.
-     */
-    function requestDepositWithPermit(
-        uint256 assets,
-        address receiver,
-        bytes memory data,
-        PermitParams calldata permitParams
-    ) public {
-        address _msgSender = _msgSender();
-        if (_asset.allowance(_msgSender, address(this)) < assets) {
-            execPermit(_msgSender, address(this), permitParams);
-        }
-        return requestDeposit(assets, receiver, _msgSender, data);
-    }
-
-    /**
      * @dev 最大请求存款
      * @notice 如果保险库被锁定或暂停，则为0。
      * @return 最大请求存款
@@ -662,17 +662,12 @@ contract AsyncVault is IERC7540, SyncVault {
     }
 
     /**
-     * @dev This function claimableRedeemBalanceInAsset is used to know if the
-     * owner will have to send money to the claimableSilo (for users who want to
-     * leave the vault) or if he will receive money from it.
-     * @param newSavedBalance 待存入金库的标的资产金额
-     * @return assetsToOwner The amount of assets the
-     * user will get if they claim their redeem request.
-     * @return assetsToVault The amount of assets the user will get if
-     * they claim their redeem request.
-     * @return expectedAssetFromOwner The amount of assets that will be taken
-     * from the owner.
-     * @return settleValues The settle values.
+     * @dev 预结算
+     * @param newSavedBalance 待存入金库的资产
+     * @return assetsToOwner The amount of assets the user will get if they claim their redeem request.
+     * @return assetsToVault The amount of assets the user will get if they claim their redeem request.
+     * @return expectedAssetFromOwner The amount of assets that will be taken from the owner.
+     * @return settleValues 结算信息
      */
     function previewSettle(
         uint256 newSavedBalance
@@ -688,34 +683,41 @@ contract AsyncVault is IERC7540, SyncVault {
     {
         // 上次保存资产余额
         uint256 _lastSavedBalance = lastSavedBalance;
+        // 检查最大回撤
         _checkMaxDrawdown(_lastSavedBalance, newSavedBalance);
-
-        // calculate the fees between lastSavedBalance and newSavedBalance
+        // 计算费用
         uint256 fees = _computeFees(_lastSavedBalance, newSavedBalance);
+        // 总股份
         uint256 totalSupply = totalSupply();
-
-        // taking fees if positive yield
+        // 待存入金库的资产 - 费用
         _lastSavedBalance = newSavedBalance - fees;
 
+        // 请求中仓库
         address pendingSiloAddr = address(pendingSilo);
+        // 请求中股份
         uint256 pendingRedeem = balanceOf(pendingSiloAddr);
+        // 请求中资产
         uint256 pendingDeposit = _asset.balanceOf(pendingSiloAddr);
 
+        // 计算请求中资产所需股份：请求中资产 * 总股份 / 总资产
         uint256 sharesToMint = pendingDeposit.mulDiv(
             totalSupply + 1,
             _lastSavedBalance + 1,
             Math.Rounding.Floor
         );
 
-        uint256 totalAssetsSnapshot = _lastSavedBalance;
-        uint256 totalSupplySnapshot = totalSupply;
-
+        // 计算请求总股份所需资产：请求中股份 * （ 总资产 + 请求中资产 ） / （ 总股份 + 请求中资产所需股份 ）
         uint256 assetsToWithdraw = pendingRedeem.mulDiv(
             _lastSavedBalance + pendingDeposit + 1,
             totalSupply + sharesToMint + 1,
             Math.Rounding.Floor
         );
 
+        // 总资产
+        uint256 totalAssetsSnapshot = _lastSavedBalance;
+        // 总份额
+        uint256 totalSupplySnapshot = totalSupply;
+        // 构建结算信息
         settleValues = SettleValues({
             lastSavedBalance: _lastSavedBalance + fees,
             fees: fees,
@@ -727,11 +729,15 @@ contract AsyncVault is IERC7540, SyncVault {
             totalSupplySnapshot: totalSupplySnapshot
         });
 
+        // 判断需要多少 资产 和 股份
         if (pendingDeposit > assetsToWithdraw) {
+            // 请求中资产 > 请求总股份所需资产，需补：请求中资产 - 请求总股份所需资产
             assetsToOwner = pendingDeposit - assetsToWithdraw;
         } else if (pendingDeposit < assetsToWithdraw) {
+            // 请求中资产 < 请求总股份所需资产，多出：请求总股份所需资产 - 请求中资产
             assetsToVault = assetsToWithdraw - pendingDeposit;
         }
+        // 费用 + 多出
         expectedAssetFromOwner = fees + assetsToVault;
     }
 
@@ -750,8 +756,8 @@ contract AsyncVault is IERC7540, SyncVault {
     /**
      * @dev 创建存款请求
      * @param assets 资产数量
-     * @param receiver 股份接收者
-     * @param owner 资产拥有者
+     * @param receiver 接收者
+     * @param owner 拥有者
      * @param data 要发送给接收者的数据
      */
     function _createDepositRequest(
@@ -783,13 +789,11 @@ contract AsyncVault is IERC7540, SyncVault {
     }
 
     /**
-     * @dev _createRedeemRequest is used to update the balance of the user in
-     * order to create the redeem request.
-     * @param shares The amount of shares requested by the user.
-     * @param receiver The address of the user that requested the redeem.
-     * @param owner The address of the user that requested the redeem.
-     * @param data The data to be sent to the receiver.
-     * @notice This function is used to update the balance of the user.
+     * @dev 创建赎回请求
+     * @param shares 股份数量
+     * @param receiver 接收者
+     * @param owner 拥有者
+     * @param data 要发送给接收者的数据
      */
     function _createRedeemRequest(
         uint256 shares,
@@ -797,11 +801,13 @@ contract AsyncVault is IERC7540, SyncVault {
         address owner,
         bytes memory data
     ) internal {
+        // 更新用户请求赎回信息
         epochs[epochId].redeemRequestBalance[receiver] += shares;
+        // 更新用户最后赎回周期ID
         if (lastRedeemRequestId[receiver] != epochId) {
             lastRedeemRequestId[receiver] = epochId;
         }
-
+        // 回调校验
         if (
             data.length > 0 &&
             ERC7540Receiver(receiver).onERC7540RedeemReceived(
@@ -813,7 +819,7 @@ contract AsyncVault is IERC7540, SyncVault {
             ) !=
             ERC7540Receiver.onERC7540RedeemReceived.selector
         ) revert ReceiverFailed();
-
+        // 发送事件
         emit RedeemRequest(receiver, owner, epochId, _msgSender(), shares);
     }
 
@@ -867,9 +873,9 @@ contract AsyncVault is IERC7540, SyncVault {
 
     /**
      * @dev 结算
-     * @param newSavedBalance 待存入金库的标的资产金额
-     * @return lastSavedBalance 最后保存的余额
-     * @return totalSupply 总供应量
+     * @param newSavedBalance 待存入金库的资产
+     * @return lastSavedBalance
+     * @return totalSupply
      */
     function _settle(
         uint256 newSavedBalance
@@ -881,7 +887,7 @@ contract AsyncVault is IERC7540, SyncVault {
             ,
             SettleValues memory settleValues
         ) = previewSettle(newSavedBalance);
-        // 发送周期结束事件
+        // 发送事件
         emit EpochEnd(
             block.timestamp,
             lastSavedBalance,
@@ -889,17 +895,20 @@ contract AsyncVault is IERC7540, SyncVault {
             settleValues.fees,
             totalSupply()
         );
+
         // 转账费用
         _asset.safeTransferFrom(owner(), treasury, settleValues.fees);
-        // 销毁本轮已发放份额
+
+        // ===== 结算股份 =====
+
+        // 销毁周期请求中股份
         _burn(address(pendingSilo), settleValues.pendingRedeem);
-        // 铸造本轮可领取份额
+        // 铸造周期请求中资产所需股份
         _mint(address(claimableSilo), settleValues.sharesToMint);
 
-        ///////////////////////////
-        // Settle assets balance //
-        ///////////////////////////
-        // either there are more deposits than withdrawals
+        // ===== 结算资产 =====
+
+        //
         if (settleValues.pendingDeposit > settleValues.assetsToWithdraw) {
             _asset.safeTransferFrom(
                 address(pendingSilo),
@@ -1018,14 +1027,15 @@ contract AsyncVault is IERC7540, SyncVault {
     }
 
     /**
-     * @dev _checkMaxDrawdown is used to check if the max drawdown is reached.
-     * @param _lastSavedBalance The last saved balance.
-     * @param newSavedBalance The new saved balance.
+     * @dev 检查最大回撤
+     * @param _lastSavedBalance 最后保存余额
+     * @param newSavedBalance 最新保存余额
      */
     function _checkMaxDrawdown(
         uint256 _lastSavedBalance,
         uint256 newSavedBalance
     ) internal view {
+        // 最新保存余额 < 计算回撤金额：最后保存余额 * （ 100% - 最大回撤阈值 ）
         if (
             newSavedBalance <
             _lastSavedBalance.mulDiv(
@@ -1036,15 +1046,22 @@ contract AsyncVault is IERC7540, SyncVault {
         ) revert MaxDrawdownReached();
     }
 
+    /**
+     * @dev 计算费用
+     * @param _lastSavedBalance 最后保存余额
+     * @param newSavedBalance 最新保存余额
+     */
     function _computeFees(
         uint256 _lastSavedBalance,
         uint256 newSavedBalance
     ) internal view returns (uint256 fees) {
         if (newSavedBalance > _lastSavedBalance && feesInBps > 0) {
+            // 计算剩余金额
             uint256 profits;
             unchecked {
                 profits = newSavedBalance - _lastSavedBalance;
             }
+            // 计算费用：剩余金额 * 费率
             fees = (profits).mulDiv(
                 feesInBps,
                 BPS_DIVIDER,

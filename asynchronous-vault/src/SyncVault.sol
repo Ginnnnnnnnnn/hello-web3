@@ -73,9 +73,9 @@ abstract contract SyncVault is
 {
     // =================== 状态变量 ===================
 
-    // 绩效费 BPS（最大 MAX_FEES=3000，即 30%）
+    // 费率 BPS（最大 MAX_FEES=3000，即 30%）
     uint16 public feesInBps;
-    // 最大提款阈值（默认 30%）
+    // 最大回撤阈值（默认 30%）
     uint16 internal _maxDrawdown;
     // 资产精度
     uint8 private _underlyingDecimals;
