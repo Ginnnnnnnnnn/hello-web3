@@ -68,14 +68,14 @@ struct EpochData {
  * @dev 结算信息
  */
 struct SettleValues {
-    uint256 lastSavedBalance; // 最后保存余额（包含费用）
+    uint256 lastSavedBalance; // 结算资产
     uint256 fees; // 费用
-    uint256 pendingRedeem; // 请求中股份
-    uint256 sharesToMint; // 请求中资产所需股份
-    uint256 pendingDeposit; // 请求中资产
-    uint256 assetsToWithdraw; // 请求总股份所需资产
-    uint256 totalAssetsSnapshot; // 总资产（不包含费用）（不包含请求中）
-    uint256 totalSupplySnapshot; // 总份额（不包含请求中）
+    uint256 pendingRedeem; // 待赎回的股份数量
+    uint256 sharesToMint; // 待存款的股份数量
+    uint256 pendingDeposit; // 待存款的资产数量
+    uint256 assetsToWithdraw; // 待赎回的资产数量
+    uint256 totalAssetsSnapshot; // 总净资产（不包含费用）（不包含请求中）
+    uint256 totalSupplySnapshot; // 总净份额（不包含请求中）
 }
 
 /**
@@ -279,7 +279,7 @@ contract AsyncVault is IERC7540, SyncVault {
         lastSavedBalance = totalAssets();
         // 设置金库状态
         vaultIsOpen = false;
-        // 转账资产到owner
+        // 转账资产到owner，进行投资
         _asset.safeTransfer(owner(), lastSavedBalance);
         // 发送事件
         emit EpochStart(block.timestamp, lastSavedBalance, totalSupply());
@@ -288,7 +288,7 @@ contract AsyncVault is IERC7540, SyncVault {
     /**
      * @dev 打开vault
      * @notice 只能由合同的所有者调用，如果有盈利，则收取履约费并发送给合约所有者。
-     * @param assetReturned 待存入金库的标的资产金额
+     * @param assetReturned 结算金额（包含盈利）
      */
     function open(
         uint256 assetReturned
@@ -461,7 +461,7 @@ contract AsyncVault is IERC7540, SyncVault {
     function settle(
         uint256 newSavedBalance
     ) external onlyOwner whenNotPaused whenClosed {
-        // 结算
+        // 结算，总资产，总份额
         (uint256 _lastSavedBalance, uint256 totalSupply) = _settle(
             newSavedBalance
         );
@@ -549,9 +549,8 @@ contract AsyncVault is IERC7540, SyncVault {
     }
 
     /**
-     * @dev This function let users claim the shares we owe them after we
-     * processed their deposit request, in the _settle function.
-     * @param receiver The address of the user that requested the deposit.
+     * @dev 认领存款股份
+     * @param receiver 接收地址
      */
     function claimDeposit(
         address receiver
@@ -560,9 +559,8 @@ contract AsyncVault is IERC7540, SyncVault {
     }
 
     /**
-     * @dev This function let users claim the assets we owe them after we
-     * processed their redeem request, in the _settle function.
-     * @param receiver The address of the user that requested the redeem.
+     * @dev 认领赎回资产
+     * @param receiver 接收地址
      */
     function claimRedeem(
         address receiver
@@ -663,10 +661,10 @@ contract AsyncVault is IERC7540, SyncVault {
 
     /**
      * @dev 预结算
-     * @param newSavedBalance 待存入金库的资产
-     * @return assetsToOwner The amount of assets the user will get if they claim their redeem request.
-     * @return assetsToVault The amount of assets the user will get if they claim their redeem request.
-     * @return expectedAssetFromOwner The amount of assets that will be taken from the owner.
+     * @param newSavedBalance 结算金额（包含盈利）
+     * @return assetsToOwner 需要转给 owner 的资产
+     * @return assetsToVault 需要转给 金库 的资产
+     * @return expectedAssetFromOwner owner 总共需要提供的资产
      * @return settleValues 结算信息
      */
     function previewSettle(
@@ -689,24 +687,20 @@ contract AsyncVault is IERC7540, SyncVault {
         uint256 fees = _computeFees(_lastSavedBalance, newSavedBalance);
         // 总股份
         uint256 totalSupply = totalSupply();
-        // 待存入金库的资产 - 费用
+        // 净资产 = 结算金额 - 费用
         _lastSavedBalance = newSavedBalance - fees;
 
-        // 请求中仓库
-        address pendingSiloAddr = address(pendingSilo);
-        // 请求中股份
-        uint256 pendingRedeem = balanceOf(pendingSiloAddr);
-        // 请求中资产
-        uint256 pendingDeposit = _asset.balanceOf(pendingSiloAddr);
-
-        // 计算请求中资产所需股份：请求中资产 * 总股份 / 总资产
+        // 待存款的资产数量
+        uint256 pendingDeposit = _asset.balanceOf(address(pendingSilo));
+        // 计算待存款的资产数量所需铸造股份：待存款的资产数量 * 总股份 / 总资产
         uint256 sharesToMint = pendingDeposit.mulDiv(
             totalSupply + 1,
             _lastSavedBalance + 1,
             Math.Rounding.Floor
         );
-
-        // 计算请求总股份所需资产：请求中股份 * （ 总资产 + 请求中资产 ） / （ 总股份 + 请求中资产所需股份 ）
+        // 待赎回的股份数量
+        uint256 pendingRedeem = balanceOf(address(pendingSilo));
+        // 计算待赎回的股份数量所需资产：待赎回的股份数量 * （ 总资产 + 待存款的资产数量 ） / （ 总股份 + 待存款的资产数量所需股份 ）
         uint256 assetsToWithdraw = pendingRedeem.mulDiv(
             _lastSavedBalance + pendingDeposit + 1,
             totalSupply + sharesToMint + 1,
@@ -719,25 +713,27 @@ contract AsyncVault is IERC7540, SyncVault {
         uint256 totalSupplySnapshot = totalSupply;
         // 构建结算信息
         settleValues = SettleValues({
-            lastSavedBalance: _lastSavedBalance + fees,
-            fees: fees,
-            pendingRedeem: pendingRedeem,
-            sharesToMint: sharesToMint,
-            pendingDeposit: pendingDeposit,
-            assetsToWithdraw: assetsToWithdraw,
-            totalAssetsSnapshot: totalAssetsSnapshot,
-            totalSupplySnapshot: totalSupplySnapshot
+            lastSavedBalance: _lastSavedBalance + fees, // 结算资产
+            fees: fees, // 费用
+            pendingRedeem: pendingRedeem, // 待赎回的股份数量
+            sharesToMint: sharesToMint, // 待存款的股份数量
+            pendingDeposit: pendingDeposit, // 待存款的资产数量
+            assetsToWithdraw: assetsToWithdraw, // 待赎回的资产数量
+            totalAssetsSnapshot: totalAssetsSnapshot, // 总净资产（不包含费用）（不包含请求中）
+            totalSupplySnapshot: totalSupplySnapshot // 总净份额（不包含请求中）
         });
 
         // 判断需要多少 资产 和 股份
         if (pendingDeposit > assetsToWithdraw) {
-            // 请求中资产 > 请求总股份所需资产，需补：请求中资产 - 请求总股份所需资产
+            // 存款 > 赎回
+            // assetsToOwner = 存款 - 赎回
             assetsToOwner = pendingDeposit - assetsToWithdraw;
         } else if (pendingDeposit < assetsToWithdraw) {
-            // 请求中资产 < 请求总股份所需资产，多出：请求总股份所需资产 - 请求中资产
+            // 存款 < 赎回
+            // assetsToVault = 赎回 - 存款
             assetsToVault = assetsToWithdraw - pendingDeposit;
         }
-        // 费用 + 多出
+        // owner 总共需要提供的资产
         expectedAssetFromOwner = fees + assetsToVault;
     }
 
@@ -873,19 +869,19 @@ contract AsyncVault is IERC7540, SyncVault {
 
     /**
      * @dev 结算
-     * @param newSavedBalance 待存入金库的资产
-     * @return lastSavedBalance
-     * @return totalSupply
+     * @param newSavedBalance 结算金额（包含盈利）
+     * @return lastSavedBalance 总资产
+     * @return totalSupply 总份额
      */
     function _settle(
         uint256 newSavedBalance
     ) internal returns (uint256, uint256) {
         // 预计算
         (
-            uint256 assetsToOwner,
-            uint256 assetsToVault,
+            uint256 assetsToOwner, // 需要转给 owner 的资产
+            uint256 assetsToVault, // 需要转给 金库 的资产
             ,
-            SettleValues memory settleValues
+            SettleValues memory settleValues // 结算信息
         ) = previewSettle(newSavedBalance);
         // 发送事件
         emit EpochEnd(
@@ -896,25 +892,29 @@ contract AsyncVault is IERC7540, SyncVault {
             totalSupply()
         );
 
+        // ========== 结算费用 ==========
+
         // 转账费用
         _asset.safeTransferFrom(owner(), treasury, settleValues.fees);
 
-        // ===== 结算股份 =====
+        // ========== 结算股份 ==========
 
-        // 销毁周期请求中股份
+        // 销毁待赎回的股份数量
         _burn(address(pendingSilo), settleValues.pendingRedeem);
-        // 铸造周期请求中资产所需股份
+        // 铸造待存款的股份数量
         _mint(address(claimableSilo), settleValues.sharesToMint);
 
-        // ===== 结算资产 =====
+        // ========== 结算资产 ==========
 
-        //
         if (settleValues.pendingDeposit > settleValues.assetsToWithdraw) {
+            // 待存款的资产数量 > 待赎回的资产数量
+            // 资产入库
             _asset.safeTransferFrom(
                 address(pendingSilo),
                 owner(),
                 assetsToOwner
             );
+            // 将赎回所需的资产转给可领取仓库
             if (settleValues.assetsToWithdraw > 0) {
                 _asset.safeTransferFrom(
                     address(pendingSilo),
@@ -925,11 +925,14 @@ contract AsyncVault is IERC7540, SyncVault {
         } else if (
             settleValues.pendingDeposit < settleValues.assetsToWithdraw
         ) {
+            // 待存款的资产数量 < 待赎回的资产数量
+            // 不足部分从 owner 处提取
             _asset.safeTransferFrom(
                 owner(),
                 address(claimableSilo),
                 assetsToVault
             );
+            // 将现有存款转给可领取仓库
             if (settleValues.pendingDeposit > 0) {
                 _asset.safeTransferFrom(
                     address(pendingSilo),
@@ -938,8 +941,8 @@ contract AsyncVault is IERC7540, SyncVault {
                 );
             }
         } else if (settleValues.pendingDeposit > 0) {
-            // if _pendingDeposit == assetsToWithdraw AND _pendingDeposit > 0
-            // (and assetsToWithdraw > 0)
+            // 存款 = 赎回
+            // 将赎回所需的资产转给可领取仓库
             _asset.safeTransferFrom(
                 address(pendingSilo),
                 address(claimableSilo),
@@ -947,6 +950,7 @@ contract AsyncVault is IERC7540, SyncVault {
             );
         }
 
+        // 发送事件
         emit Deposit(
             address(pendingSilo),
             address(claimableSilo),
@@ -962,18 +966,17 @@ contract AsyncVault is IERC7540, SyncVault {
             settleValues.pendingRedeem
         );
 
+        // 更新信息
         settleValues.lastSavedBalance =
             settleValues.lastSavedBalance -
             settleValues.fees +
             settleValues.pendingDeposit -
             settleValues.assetsToWithdraw;
         lastSavedBalance = settleValues.lastSavedBalance;
-
         epochs[epochId].totalSupplySnapshot = settleValues.totalSupplySnapshot;
         epochs[epochId].totalAssetsSnapshot = settleValues.totalAssetsSnapshot;
-
         epochId++;
-
+        // 返回
         return (settleValues.lastSavedBalance, totalSupply());
     }
 

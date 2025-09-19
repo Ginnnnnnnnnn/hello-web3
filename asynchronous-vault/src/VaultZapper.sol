@@ -1,19 +1,14 @@
 //SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+pragma solidity ^0.8.21;
 
-import {
-    Ownable2Step,
-    Ownable
-} from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
-import { SafeERC20 } from
-    "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { IERC7540, IERC4626 } from "./interfaces/IERC7540.sol";
-import { PermitParams, AsyncVault } from "./AsyncVault.sol";
-import { ERC20Permit } from
-    "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC7540, IERC4626} from "./interfaces/IERC7540.sol";
+import {PermitParams, AsyncVault} from "./AsyncVault.sol";
+import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 contract VaultZapper is Ownable2Step, Pausable {
     /**
@@ -27,17 +22,16 @@ contract VaultZapper is Ownable2Step, Pausable {
      */
     using Address for address payable;
 
-    /**
-     * @notice The `authorizedVaults` mapping is used to check if a vault is
-     * authorized to interact with the `VaultZapper` contract.
-     */
+    // =================== 状态变量 ===================
+
+    // 金库合约授权映射
     mapping(IERC4626 vault => bool isAuthorized) public authorizedVaults;
 
-    /**
-     * @notice The `authorizedRouters` mapping is used to check if a router is
-     * authorized to interact with the `VaultZapper` contract.
-     */
-    mapping(address routerAddress => bool isAuthorized) public authorizedRouters;
+    // 交易合约授权映射
+    mapping(address routerAddress => bool isAuthorized)
+        public authorizedRouters;
+
+    // =================== 事件 ===================
 
     /**
      * @dev The `ZapAndDeposit` event is emitted when a user zaps in and
@@ -80,6 +74,8 @@ contract VaultZapper is Ownable2Step, Pausable {
      */
     event VaultAuthorized(IERC4626 indexed vault, bool allowed);
 
+    // =================== 错误 ===================
+
     /**
      * @dev The `NotRouter` error is emitted when a router is not authorized to
      * interact with the `VaultZapper` contract.
@@ -99,7 +95,8 @@ contract VaultZapper is Ownable2Step, Pausable {
      * inconsistant.
      */
     error InconsistantSwapData(
-        uint256 expectedTokenInBalance, uint256 actualTokenInBalance
+        uint256 expectedTokenInBalance,
+        uint256 actualTokenInBalance
     );
     /**
      * @dev The `NotEnoughSharesMinted` error is emitted when the amount of
@@ -112,7 +109,8 @@ contract VaultZapper is Ownable2Step, Pausable {
      * underlying assets is not enough.
      */
     error NotEnoughUnderlying(
-        uint256 previewedUnderlying, uint256 withdrawedUnderlying
+        uint256 previewedUnderlying,
+        uint256 withdrawedUnderlying
     );
 
     /**
@@ -127,6 +125,8 @@ contract VaultZapper is Ownable2Step, Pausable {
      * https://dedaub.com/blog/phantom-functions-and-the-billion-dollar-no-op
      */
     error PermitFailed();
+
+    // =================== 修饰器 ===================
 
     /**
      * @dev The `onlyAllowedRouter` modifier is used to check if a router is
@@ -146,59 +146,53 @@ contract VaultZapper is Ownable2Step, Pausable {
         _;
     }
 
-    constructor() Ownable(_msgSender()) { }
+    // =================== 初始化 ===================
+
+    constructor() Ownable(_msgSender()) {}
+
+    // =================== 合约设置 ===================
 
     /**
-     * @dev The `withdrawToken` function is used to withdraw tokens from the
-     * `VaultZapper` contract.
-     */
-    function withdrawToken(IERC20 token) external onlyOwner {
-        token.safeTransfer(_msgSender(), token.balanceOf(address(this)));
-    }
-
-    /**
-     * @dev The `withdrawNativeToken` function is used to withdraw native tokens
-     * from the `VaultZapper` contract.
-     */
-    function withdrawNativeToken() external onlyOwner {
-        payable(_msgSender()).sendValue(address(this).balance);
-    }
-
-    /**
-     * @dev The `pause` function is used to pause the `VaultZapper` contract.
+     * @dev 暂停
      */
     function pause() external onlyOwner {
         _pause();
     }
 
     /**
-     * @dev The `unpause` function is used to unpause the `VaultZapper`
-     * contract.
+     * @dev 取消暂停
      */
     function unpause() external onlyOwner {
         _unpause();
     }
 
     /**
-     * @dev The `approveTokenForRouter` function is used to approve a token for
-     * a
-     * router.
+     * @dev 提现代币
+     */
+    function withdrawToken(IERC20 token) external onlyOwner {
+        token.safeTransfer(_msgSender(), token.balanceOf(address(this)));
+    }
+
+    /**
+     * @dev 提现代币-ETH
+     */
+    function withdrawNativeToken() external onlyOwner {
+        payable(_msgSender()).sendValue(address(this).balance);
+    }
+
+    /**
+     * @dev 授权 Token 到 交易合约
      */
     function approveTokenForRouter(
         IERC20 token,
         address router
-    )
-        public
-        onlyOwner
-        onlyAllowedRouter(router)
-    {
+    ) public onlyOwner onlyAllowedRouter(router) {
         token.forceApprove(router, type(uint256).max);
         emit RouterApproved(router, token);
     }
 
     /**
-     * @dev The `toggleRouterAuthorization` function is used to toggle the
-     * authorization of a router.
+     * @dev 设置交易合约授权
      */
     function toggleRouterAuthorization(address router) public onlyOwner {
         bool authorized = !authorizedRouters[router];
@@ -207,80 +201,54 @@ contract VaultZapper is Ownable2Step, Pausable {
     }
 
     /**
-     * @dev The `toggleVaultAuthorization` function is used to toggle the
-     * authorization of a vault.
+     * @dev 设置金库合约授权
      */
     function toggleVaultAuthorization(IERC7540 vault) public onlyOwner {
         bool authorized = !authorizedVaults[vault];
         IERC20(vault.asset()).forceApprove(
-            address(vault), authorized ? type(uint256).max : 0
+            address(vault),
+            authorized ? type(uint256).max : 0
         );
         authorizedVaults[vault] = authorized;
         emit VaultAuthorized(vault, authorized);
     }
 
+    // =================== 功能方法 ===================
+
     /**
-     * @dev The `_zapIn` function is used to zap in assets into a vault.
+     * @dev 存款-离线许可授权
+     * @param tokenIn 代币地址
+     * @param vault 金库地址
+     * @param router 交易地址
+     * @param amount 代币金额
+     * @param swapData 交易参数
+     * @param permitParams 离线许可参数
+     * @return 股份
      */
-    function _zapIn(
+    function zapAndDepositWithPermit(
         IERC20 tokenIn,
+        IERC4626 vault,
         address router,
         uint256 amount,
-        bytes calldata data
-    )
-        internal
-    {
-        uint256 expectedBalance; // of tokenIn (currently)
-
-        if (msg.value == 0) {
-            expectedBalance = tokenIn.balanceOf(address(this));
-            _transferTokenInAndApprove(router, tokenIn, amount);
-        } else {
-            expectedBalance = address(this).balance - msg.value;
+        bytes calldata swapData,
+        PermitParams calldata permitParams
+    ) public returns (uint256) {
+        // 检查授权
+        if (tokenIn.allowance(_msgSender(), address(this)) < amount) {
+            // 执行授权
+            _execPermit(tokenIn, _msgSender(), address(this), permitParams);
         }
-
-        _executeZap(router, data); // zap
-
-        uint256 balanceAfterZap = msg.value == 0
-            ? tokenIn.balanceOf(address(this))
-            : address(this).balance;
-
-        if (balanceAfterZap > expectedBalance) {
-            // Our balance is higher than expected, we shouldn't have received
-            // any token
-            revert InconsistantSwapData({
-                expectedTokenInBalance: expectedBalance,
-                actualTokenInBalance: balanceAfterZap
-            });
-        }
+        return zapAndDeposit(tokenIn, vault, router, amount, swapData);
     }
 
     /**
-     * @dev The `_transferTokenInAndApprove` function is used to transfer tokens
-     * into the `VaultZapper` contract and approve them for a router.
-     */
-    function _transferTokenInAndApprove(
-        address router,
-        IERC20 tokenIn,
-        uint256 amount
-    )
-        internal
-    {
-        tokenIn.safeTransferFrom(_msgSender(), address(this), amount);
-        if (tokenIn.allowance(address(this), router) < amount) {
-            tokenIn.forceApprove(router, amount);
-        }
-    }
-
-    /*
-     ########################
-      USER RELATED FUNCTIONS
-     ########################
-    */
-
-    /**
-     * @dev The `zapAndDeposit` function is used to zap in and deposit assets
-     * into a vault.
+     * @dev 存款
+     * @param tokenIn 代币地址
+     * @param vault 金库地址
+     * @param router 交易地址
+     * @param amount 代币金额
+     * @param data 交易参数
+     * @return 股份
      */
     function zapAndDeposit(
         IERC20 tokenIn,
@@ -296,20 +264,19 @@ contract VaultZapper is Ownable2Step, Pausable {
         whenNotPaused
         returns (uint256)
     {
-        uint256 initialTokenOutBalance =
-            IERC20(vault.asset()).balanceOf(address(this)); // tokenOut balance to
-            // deposit, not final value
-
-        // Zap
+        // 查询用户金库资金余额
+        uint256 initialTokenOutBalance = IERC20(vault.asset()).balanceOf(
+            address(this)
+        );
+        // 兑换
         _zapIn(tokenIn, router, amount, data);
-
-        // Deposit
+        // 存款，兑换后余额 - 兑换前余额
         uint256 shares = vault.deposit(
-            IERC20(vault.asset()).balanceOf(address(this))
-                - initialTokenOutBalance,
+            IERC20(vault.asset()).balanceOf(address(this)) -
+                initialTokenOutBalance,
             _msgSender()
         );
-
+        // 发送事件
         emit ZapAndDeposit({
             vault: vault,
             router: router,
@@ -317,13 +284,18 @@ contract VaultZapper is Ownable2Step, Pausable {
             amount: amount,
             shares: shares
         });
-
+        // 返回
         return shares;
     }
 
     /**
-     * @dev The `zapAndRequestDeposit` function is used to zap in and request a
-     * deposit of assets into a vault.
+     * @dev 请求存款
+     * @param tokenIn 代币地址
+     * @param vault 金库地址
+     * @param router 交易地址
+     * @param amount 代币金额
+     * @param swapData 交易参数
+     * @param callback7540Data 要发送给接收者的数据
      */
     function zapAndRequestDeposit(
         IERC20 tokenIn,
@@ -339,22 +311,21 @@ contract VaultZapper is Ownable2Step, Pausable {
         onlyAllowedVault(vault)
         whenNotPaused
     {
-        uint256 initialTokenOutBalance =
-            IERC20(vault.asset()).balanceOf(address(this)); // tokenOut balance to
-            // deposit, not final value
-
-        // Zap
+        // 查询用户金库资金余额
+        uint256 initialTokenOutBalance = IERC20(vault.asset()).balanceOf(
+            address(this)
+        );
+        // 兑换
         _zapIn(tokenIn, router, amountIn, swapData);
-
-        // Request deposit
+        // 请求存款，兑换后余额 - 兑换前余额
         vault.requestDeposit(
-            IERC20(vault.asset()).balanceOf(address(this))
-                - initialTokenOutBalance,
+            IERC20(vault.asset()).balanceOf(address(this)) -
+                initialTokenOutBalance,
             _msgSender(),
             address(this),
             callback7540Data
         );
-
+        // 发送事件
         emit ZapAndRequestDeposit({
             vault: vault,
             router: router,
@@ -363,36 +334,15 @@ contract VaultZapper is Ownable2Step, Pausable {
         });
     }
 
-    /*
-     ##########################
-      PERMIT RELATED FUNCTIONS
-     ##########################
-    */
-
     /**
-     * @dev The `zapAndDepositWithPermit` function is used to zap in and deposit
-     * assets into a vault with a permit.
-     */
-    function zapAndDepositWithPermit(
-        IERC20 tokenIn,
-        IERC4626 vault,
-        address router,
-        uint256 amount,
-        bytes calldata swapData,
-        PermitParams calldata permitParams
-    )
-        public
-        returns (uint256)
-    {
-        if (tokenIn.allowance(_msgSender(), address(this)) < amount) {
-            _execPermit(tokenIn, _msgSender(), address(this), permitParams);
-        }
-        return zapAndDeposit(tokenIn, vault, router, amount, swapData);
-    }
-
-    /**
-     * @dev The `zapAndRequestDepositWithPermit` function is used to zap in and
-     * request a deposit of assets into a vault with a permit.
+     * @dev 请求存款
+     * @param tokenIn 代币地址
+     * @param vault 金库地址
+     * @param router 交易地址
+     * @param amount 代币金额
+     * @param swapData 交易参数
+     * @param permitParams 离线许可参数
+     * @param callback7540Data 要发送给接收者的数据
      */
     function zapAndRequestDepositWithPermit(
         IERC20 tokenIn,
@@ -402,29 +352,85 @@ contract VaultZapper is Ownable2Step, Pausable {
         bytes calldata swapData,
         PermitParams calldata permitParams,
         bytes calldata callback7540Data
-    )
-        public
-    {
+    ) public {
+        // 检查授权
         if (tokenIn.allowance(_msgSender(), address(this)) < amount) {
+            // 执行授权
             _execPermit(tokenIn, _msgSender(), address(this), permitParams);
         }
+        // 请求存款
         zapAndRequestDeposit(
-            tokenIn, vault, router, amount, swapData, callback7540Data
+            tokenIn,
+            vault,
+            router,
+            amount,
+            swapData,
+            callback7540Data
         );
     }
 
     /**
-     * @dev The `_executeZap` function is used to execute a zap.
+     * @dev 兑换代币
+     * @param tokenIn 代币地址
+     * @param router 交易地址
+     * @param amount 代币金额
+     * @param data 交易参数
+     */
+    function _zapIn(
+        IERC20 tokenIn,
+        address router,
+        uint256 amount,
+        bytes calldata data
+    ) internal {
+        // 记录当期余额
+        uint256 expectedBalance;
+        if (msg.value == 0) {
+            expectedBalance = tokenIn.balanceOf(address(this));
+            // 转账 和 授权 代币
+            _transferTokenInAndApprove(router, tokenIn, amount);
+        } else {
+            expectedBalance = address(this).balance - msg.value;
+        }
+        // 执行兑换
+        _executeZap(router, data);
+        // 交易后余额
+        uint256 balanceAfterZap = msg.value == 0
+            ? tokenIn.balanceOf(address(this))
+            : address(this).balance;
+        // 校验是否成功
+        if (balanceAfterZap > expectedBalance) {
+            // 余额高于预期
+            revert InconsistantSwapData({
+                expectedTokenInBalance: expectedBalance,
+                actualTokenInBalance: balanceAfterZap
+            });
+        }
+    }
+
+    /**
+     * @dev 转账 和 授权 代币
+     */
+    function _transferTokenInAndApprove(
+        address router,
+        IERC20 tokenIn,
+        uint256 amount
+    ) internal {
+        tokenIn.safeTransferFrom(_msgSender(), address(this), amount);
+        if (tokenIn.allowance(address(this), router) < amount) {
+            tokenIn.forceApprove(router, amount);
+        }
+    }
+
+    /**
+     * @dev 兑换
      */
     function _executeZap(
         address target,
         bytes memory data
-    )
-        internal
-        returns (bytes memory response)
-    {
-        (bool success, bytes memory _data) =
-            target.call{ value: msg.value }(data);
+    ) internal returns (bytes memory response) {
+        (bool success, bytes memory _data) = target.call{value: msg.value}(
+            data
+        );
         if (!success) {
             if (data.length > 0) revert SwapFailed(string(_data));
             else revert SwapFailed("Unknown reason");
@@ -433,16 +439,18 @@ contract VaultZapper is Ownable2Step, Pausable {
     }
 
     /**
-     * @dev The `_executePermit` function is used to execute a permit.
+     * @dev 执行授权
+     * @param token 代币地址
+     * @param owner 拥有者
+     * @param spender 授权接收地址
+     * @param permitParams 离线签名参数
      */
     function _execPermit(
         IERC20 token,
         address owner,
         address spender,
         PermitParams calldata permitParams
-    )
-        internal
-    {
+    ) internal {
         ERC20Permit(address(token)).permit(
             owner,
             spender,
